@@ -24,7 +24,7 @@ pandas==2.2.2
 
 # Statistical functions – additional distribution sampling
 scipy==1.13.0
-
+pytest-cov>=5.0.0
 # ============================================================
 # Development / testing (optional)
 # ============================================================
