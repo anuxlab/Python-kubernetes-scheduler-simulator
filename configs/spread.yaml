@@ -1,0 +1,39 @@
+# Spread configuration for evaluating the load‑balancing policy.
+# The cluster has 8 identical nodes, and the workload consists of
+# many small CPU‑only pods. The spread policy should distribute them
+# evenly, avoiding hotspots and maximising resource utilisation.
+cluster:
+  nodes:
+    - name: worker-1
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 0 }
+    - name: worker-2
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 0 }
+    - name: worker-3
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 0 }
+    - name: worker-4
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 0 }
+    - name: worker-5
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 0 }
+    - name: worker-6
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 0 }
+    - name: worker-7
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 0 }
+    - name: worker-8
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 0 }
+
+workload:
+  type: synthetic
+  num_pods: 400
+  inter_arrival: { type: exponential, mean: 0.8 }
+  cpu: { type: uniform, min: 0.2, max: 1.2 }
+  memory: { type: uniform, min: 0.5, max: 2.5 }
+  gpu: { type: choice, values: [0, 0, 0, 0, 0, 1] }   # only 1/6 chance of GPU
+  gang_prob: 0.0
+  gang_size: { type: constant, value: 1 }
+
+simulation:
+  policy: spread
+  until: 3000.0
+  log_interval: 100.0
+  seed: 31415
+  runtime_function: default

@@ -1,0 +1,39 @@
+# FGD (First Gang Deployed) configuration for gang scheduling evaluation.
+# The workload is heavily gang-oriented, with 40% of pods grouped into gangs
+# of size 2–4. This stresses the FGD policy's ability to find single nodes
+# that can accommodate entire gangs atomically.
+cluster:
+  nodes:
+    # Large GPU nodes that can fit big gangs
+    - name: gpu-big-1
+      capacity: { cpu: 16.0, memory: 32.0, gpu: 4 }
+    - name: gpu-big-2
+      capacity: { cpu: 16.0, memory: 32.0, gpu: 4 }
+    # Medium GPU nodes
+    - name: gpu-med-1
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 2 }
+    - name: gpu-med-2
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 2 }
+    # CPU‑only nodes
+    - name: cpu-1
+      capacity: { cpu: 24.0, memory: 48.0, gpu: 0 }
+    - name: cpu-2
+      capacity: { cpu: 24.0, memory: 48.0, gpu: 0 }
+
+workload:
+  type: synthetic
+  num_pods: 200
+  inter_arrival: { type: exponential, mean: 1.0 }
+  cpu: { type: uniform, min: 0.5, max: 3.0 }
+  memory: { type: uniform, min: 1.0, max: 6.0 }
+  # GPU: 50% chance of 1 GPU, 10% chance of 2, rest 0
+  gpu: { type: choice, values: [0, 0, 0, 0, 1, 1, 1, 2] }
+  gang_prob: 0.4                         # 40% of pods are in gangs
+  gang_size: { type: uniform, min: 2, max: 4 }
+
+simulation:
+  policy: fgd
+  until: 3000.0
+  log_interval: 100.0
+  seed: 789
+  runtime_function: resource_based      # runtime scales with resource requests

@@ -1,0 +1,71 @@
+# Large-scale stress test with 20 nodes and 2,000 pods.
+# Designed to measure scheduler scalability and resource utilisation.
+# Cluster:
+#   - 5 GPU nodes with 4 GPUs each
+#   - 10 CPU‑heavy nodes with 48 CPUs, 128 GB memory
+#   - 5 small nodes for residual workloads
+cluster:
+  nodes:
+    # GPU nodes (5)
+    - name: gpu-big-1
+      capacity: { cpu: 24.0, memory: 64.0, gpu: 4 }
+    - name: gpu-big-2
+      capacity: { cpu: 24.0, memory: 64.0, gpu: 4 }
+    - name: gpu-big-3
+      capacity: { cpu: 24.0, memory: 64.0, gpu: 4 }
+    - name: gpu-big-4
+      capacity: { cpu: 24.0, memory: 64.0, gpu: 4 }
+    - name: gpu-big-5
+      capacity: { cpu: 24.0, memory: 64.0, gpu: 4 }
+
+    # CPU‑heavy nodes (10)
+    - name: cpu-heavy-1
+      capacity: { cpu: 48.0, memory: 128.0, gpu: 0 }
+    - name: cpu-heavy-2
+      capacity: { cpu: 48.0, memory: 128.0, gpu: 0 }
+    - name: cpu-heavy-3
+      capacity: { cpu: 48.0, memory: 128.0, gpu: 0 }
+    - name: cpu-heavy-4
+      capacity: { cpu: 48.0, memory: 128.0, gpu: 0 }
+    - name: cpu-heavy-5
+      capacity: { cpu: 48.0, memory: 128.0, gpu: 0 }
+    - name: cpu-heavy-6
+      capacity: { cpu: 48.0, memory: 128.0, gpu: 0 }
+    - name: cpu-heavy-7
+      capacity: { cpu: 48.0, memory: 128.0, gpu: 0 }
+    - name: cpu-heavy-8
+      capacity: { cpu: 48.0, memory: 128.0, gpu: 0 }
+    - name: cpu-heavy-9
+      capacity: { cpu: 48.0, memory: 128.0, gpu: 0 }
+    - name: cpu-heavy-10
+      capacity: { cpu: 48.0, memory: 128.0, gpu: 0 }
+
+    # Small nodes (5)
+    - name: small-1
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 0 }
+    - name: small-2
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 0 }
+    - name: small-3
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 0 }
+    - name: small-4
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 0 }
+    - name: small-5
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 0 }
+
+workload:
+  type: synthetic
+  num_pods: 2000
+  inter_arrival: { type: exponential, mean: 0.5 }   # ~2 pods per time unit
+  cpu: { type: uniform, min: 0.2, max: 3.0 }
+  memory: { type: uniform, min: 0.5, max: 6.0 }
+  # GPU distribution: 70% no GPU, 20% 1 GPU, 10% 2 GPUs
+  gpu: { type: choice, values: [0, 0, 0, 0, 0, 0, 0, 1, 1, 2] }
+  gang_prob: 0.1
+  gang_size: { type: uniform, min: 2, max: 4 }
+
+simulation:
+  policy: spread
+  until: 10000.0
+  log_interval: 500.0
+  seed: 9999
+  runtime_function: default           # exponential(mean=60)

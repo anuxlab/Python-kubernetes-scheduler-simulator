@@ -1,0 +1,36 @@
+# ============================================================
+# Requirements for anu_kss Python port
+# Python 3.8+ recommended
+# ============================================================
+
+# Core simulation engine – discrete-event simulation
+simpy==4.1.1
+
+# Configuration parsing (YAML)
+pyyaml==6.0.2
+
+# ============================================================
+# Optional but recommended for performance & analysis
+# ============================================================
+
+# Numerical operations – used in advanced policies or stats
+numpy==1.26.4
+
+# Plotting – used by experiments.py when --plot is given
+matplotlib==3.8.4
+
+# Data manipulation – useful for post-processing results
+pandas==2.2.2
+
+# Statistical functions – additional distribution sampling
+scipy==1.13.0
+
+# ============================================================
+# Development / testing (optional)
+# ============================================================
+
+# pytest for unit tests
+pytest==8.2.1
+
+# For code linting and formatting
+ruff==0.4.8

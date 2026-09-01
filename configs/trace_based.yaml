@@ -1,0 +1,32 @@
+# Trace-based configuration using a CSV file that mimics Alibaba cluster trace patterns.
+# The trace file (workloads/alibaba_style_trace.csv) contains pods with varying
+# resource requests, submission times, and gang structures.
+cluster:
+  nodes:
+    - name: node-1
+      capacity: { cpu: 16.0, memory: 32.0, gpu: 2 }
+    - name: node-2
+      capacity: { cpu: 16.0, memory: 32.0, gpu: 2 }
+    - name: node-3
+      capacity: { cpu: 16.0, memory: 32.0, gpu: 1 }
+    - name: node-4
+      capacity: { cpu: 16.0, memory: 32.0, gpu: 0 }
+    - name: node-5
+      capacity: { cpu: 32.0, memory: 64.0, gpu: 0 }
+    - name: node-6
+      capacity: { cpu: 32.0, memory: 64.0, gpu: 0 }
+    - name: node-7
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 0 }
+    - name: node-8
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 0 }
+
+workload:
+  type: trace
+  file: workloads/alibaba_style_trace.csv
+
+simulation:
+  policy: gpupack
+  until: 10000.0
+  log_interval: 200.0
+  seed: 456
+  runtime_function: resource_based

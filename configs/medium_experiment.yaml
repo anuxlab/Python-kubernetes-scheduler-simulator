@@ -1,0 +1,45 @@
+# Medium-scale experiment representative of a production cluster.
+# Includes a mix of GPU and CPU nodes, with variable pod sizes and gang workloads.
+cluster:
+  nodes:
+    # GPU-capable nodes (2 GPUs each)
+    - name: gpu-node-1
+      capacity: { cpu: 16.0, memory: 32.0, gpu: 2 }
+    - name: gpu-node-2
+      capacity: { cpu: 16.0, memory: 32.0, gpu: 2 }
+    - name: gpu-node-3
+      capacity: { cpu: 16.0, memory: 32.0, gpu: 2 }
+    # CPU‑only nodes (large memory)
+    - name: cpu-node-1
+      capacity: { cpu: 32.0, memory: 64.0, gpu: 0 }
+    - name: cpu-node-2
+      capacity: { cpu: 32.0, memory: 64.0, gpu: 0 }
+    - name: cpu-node-3
+      capacity: { cpu: 32.0, memory: 64.0, gpu: 0 }
+    # Small nodes for residual workloads
+    - name: small-node-1
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 0 }
+    - name: small-node-2
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 0 }
+    - name: small-node-3
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 0 }
+    - name: small-node-4
+      capacity: { cpu: 8.0, memory: 16.0, gpu: 0 }
+
+workload:
+  type: synthetic
+  num_pods: 500
+  inter_arrival: { type: exponential, mean: 1.0 }
+  cpu: { type: uniform, min: 0.5, max: 4.0 }
+  memory: { type: uniform, min: 1.0, max: 8.0 }
+  # GPU distribution: 70% no GPU, 20% 1 GPU, 10% 2 GPUs
+  gpu: { type: choice, values: [0, 0, 0, 0, 0, 0, 0, 1, 1, 2] }
+  gang_prob: 0.25                      # 25% of pods belong to a gang
+  gang_size: { type: uniform, min: 2, max: 5 }
+
+simulation:
+  policy: fgd                          # First Gang Deployed
+  until: 5000.0
+  log_interval: 200.0
+  seed: 12345
+  runtime_function: resource_based    # service time scales with resource requests
