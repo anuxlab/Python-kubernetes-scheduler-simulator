@@ -10,12 +10,12 @@ The cluster is the central state object used by the scheduling policies
 (e.g., best-fit, spread, FGD) and the SimPy simulation loop.
 """
 
-from typing import List, Optional, Dict, Set
 from collections import defaultdict
+
+from .node import Node
 
 # Import the core data types from the other modules
 from .pod import Pod, ResourceRequest
-from .node import Node
 
 
 class Cluster:
@@ -29,7 +29,7 @@ class Cluster:
         _gang_to_pods (Dict[str, List[Pod]]): Quick lookup: gang ID -> list of pods.
     """
 
-    def __init__(self, nodes: List[Node]) -> None:
+    def __init__(self, nodes: list[Node]) -> None:
         """
         Initialise the cluster with a list of pre-configured nodes.
 
@@ -37,11 +37,11 @@ class Cluster:
             nodes: A list of Node objects representing the cluster's capacity.
         """
         self.nodes = nodes
-        self.pending_pods: List[Pod] = []
+        self.pending_pods: list[Pod] = []
 
         # Internal indexes for fast lookups
-        self._pod_to_node: Dict[str, str] = {}
-        self._gang_to_pods: Dict[str, List[Pod]] = defaultdict(list)
+        self._pod_to_node: dict[str, str] = {}
+        self._gang_to_pods: dict[str, list[Pod]] = defaultdict(list)
 
         # Validate that node names are unique
         names = [n.name for n in self.nodes]
@@ -66,11 +66,11 @@ class Cluster:
         if pod.gang_id:
             self._gang_to_pods[pod.gang_id].append(pod)
 
-    def get_pending_pods(self) -> List[Pod]:
+    def get_pending_pods(self) -> list[Pod]:
         """Return a shallow copy of the current pending pod queue."""
         return self.pending_pods.copy()
 
-    def get_pending_pods_by_gang(self, gang_id: str) -> List[Pod]:
+    def get_pending_pods_by_gang(self, gang_id: str) -> list[Pod]:
         """
         Return all pending pods that belong to a specific gang.
 
@@ -105,7 +105,7 @@ class Cluster:
     # Node Lookup and Resource Queries
     # -------------------------------------------------------------------------
 
-    def get_node_by_name(self, name: str) -> Optional[Node]:
+    def get_node_by_name(self, name: str) -> Node | None:
         """
         Retrieve a node by its unique name.
 
@@ -120,11 +120,11 @@ class Cluster:
                 return node
         return None
 
-    def get_all_nodes(self) -> List[Node]:
+    def get_all_nodes(self) -> list[Node]:
         """Return the full list of nodes."""
         return self.nodes.copy()
 
-    def get_available_nodes_for_pod(self, pod: Pod) -> List[Node]:
+    def get_available_nodes_for_pod(self, pod: Pod) -> list[Node]:
         """
         Return a list of all nodes that currently have enough free resources
         to accommodate the given pod.
@@ -140,7 +140,7 @@ class Cluster:
         """
         return [n for n in self.nodes if n.can_fit(pod.resources)]
 
-    def can_fit_gang_on_node(self, gang_pods: List[Pod], node: Node) -> bool:
+    def can_fit_gang_on_node(self, gang_pods: list[Pod], node: Node) -> bool:
         """
         Check whether a single node can host all pods of a gang simultaneously.
 
@@ -167,9 +167,11 @@ class Cluster:
         available_mem = node.capacity.memory - node.allocated.memory
         available_gpu = node.capacity.gpu - node.allocated.gpu
 
-        return (total_req.cpu <= available_cpu and
-                total_req.memory <= available_mem and
-                total_req.gpu <= available_gpu)
+        return (
+            total_req.cpu <= available_cpu
+            and total_req.memory <= available_mem
+            and total_req.gpu <= available_gpu
+        )
 
     # -------------------------------------------------------------------------
     # Pod Assignment and Resource Accounting
@@ -248,7 +250,7 @@ class Cluster:
         # Clean internal index
         del self._pod_to_node[pod.uid]
 
-    def get_node_for_pod(self, pod: Pod) -> Optional[Node]:
+    def get_node_for_pod(self, pod: Pod) -> Node | None:
         """
         Return the Node to which the pod is currently assigned, or None
         if it is not assigned.
@@ -296,7 +298,7 @@ class Cluster:
             used.gpu += node.allocated.gpu
         return used
 
-    def get_cluster_utilization(self) -> Dict[str, float]:
+    def get_cluster_utilization(self) -> dict[str, float]:
         """
         Return a dictionary with overall cluster utilisation fractions
         for CPU, memory, and GPU.
@@ -342,29 +344,35 @@ class Cluster:
             sum_cpu = sum(p.resources.cpu for p in node.pods)
             sum_mem = sum(p.resources.memory for p in node.pods)
             sum_gpu = sum(p.resources.gpu for p in node.pods)
-            assert abs(node.allocated.cpu - sum_cpu) < 1e-6, \
+            assert abs(node.allocated.cpu - sum_cpu) < 1e-6, (
                 f"Node {node.name}: allocated CPU mismatch"
-            assert abs(node.allocated.memory - sum_mem) < 1e-6, \
+            )
+            assert abs(node.allocated.memory - sum_mem) < 1e-6, (
                 f"Node {node.name}: allocated memory mismatch"
-            assert abs(node.allocated.gpu - sum_gpu) < 1e-6, \
+            )
+            assert abs(node.allocated.gpu - sum_gpu) < 1e-6, (
                 f"Node {node.name}: allocated GPU mismatch"
+            )
 
         # 2. Check pod-to-node index consistency
         assigned_uids = set()
         for node in self.nodes:
             for pod in node.pods:
-                assert pod.uid in self._pod_to_node, \
+                assert pod.uid in self._pod_to_node, (
                     f"Pod {pod.uid} on node {node.name} missing from index"
-                assert self._pod_to_node[pod.uid] == node.name, \
+                )
+                assert self._pod_to_node[pod.uid] == node.name, (
                     f"Pod {pod.uid} index points to {self._pod_to_node[pod.uid]} but is on {node.name}"
+                )
                 assigned_uids.add(pod.uid)
 
         # 3. All indexed pods must be on a node
         for uid, node_name in self._pod_to_node.items():
             node = self.get_node_by_name(node_name)
             assert node is not None, f"Index points to non-existent node {node_name}"
-            assert any(p.uid == uid for p in node.pods), \
+            assert any(p.uid == uid for p in node.pods), (
                 f"Pod {uid} in index but not in node's pod list"
+            )
 
         # 4. No pod in both pending and running
         pending_uids = {p.uid for p in self.pending_pods}

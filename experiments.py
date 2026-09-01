@@ -53,32 +53,36 @@ Configuration file format (YAML):
 Command-line arguments override config options where appropriate.
 """
 
-import sys
-import os
 import argparse
-import yaml
-import json
 import csv
-import random
+import json
 import logging
-from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple, Union
+import random
 from collections import defaultdict
-import math
+from pathlib import Path
+from typing import Any
+
+import yaml
 
 # Import the simulation package
 from sim import (
-    Cluster, Node, Pod, ResourceRequest,
-    Scheduler, Simulator, SimulationStats,
-    default_runtime_func, resource_based_runtime,
+    Cluster,
+    Node,
+    Pod,
+    ResourceRequest,
+    Scheduler,
+    SimulationStats,
+    Simulator,
+    default_runtime_func,
+    resource_based_runtime,
 )
-
 
 # -------------------------------------------------------------------------
 # Configuration Loading
 # -------------------------------------------------------------------------
 
-def load_config(config_file: str) -> Dict[str, Any]:
+
+def load_config(config_file: str) -> dict[str, Any]:
     """
     Load and parse a YAML configuration file.
 
@@ -88,12 +92,12 @@ def load_config(config_file: str) -> Dict[str, Any]:
     Returns:
         Dictionary with configuration.
     """
-    with open(config_file, 'r') as f:
+    with open(config_file, "r") as f:
         config = yaml.safe_load(f)
     return config
 
 
-def build_cluster_from_config(cluster_config: Dict[str, Any]) -> Cluster:
+def build_cluster_from_config(cluster_config: dict[str, Any]) -> Cluster:
     """
     Build a Cluster object from the configuration.
 
@@ -113,20 +117,21 @@ def build_cluster_from_config(cluster_config: Dict[str, Any]) -> Cluster:
         Cluster instance.
     """
     nodes = []
-    for node_cfg in cluster_config['nodes']:
-        cap = node_cfg['capacity']
+    for node_cfg in cluster_config["nodes"]:
+        cap = node_cfg["capacity"]
         res = ResourceRequest(
-            cpu=float(cap.get('cpu', 0.0)),
-            memory=float(cap.get('memory', 0.0)),
-            gpu=int(cap.get('gpu', 0))
+            cpu=float(cap.get("cpu", 0.0)),
+            memory=float(cap.get("memory", 0.0)),
+            gpu=int(cap.get("gpu", 0)),
         )
-        node = Node(name=node_cfg['name'], capacity=res)
+        node = Node(name=node_cfg["name"], capacity=res)
         nodes.append(node)
     return Cluster(nodes)
 
 
-def build_workload_from_config(workload_config: Dict[str, Any],
-                               rng: random.Random) -> List[Tuple[float, Union[Pod, List[Pod]]]]:
+def build_workload_from_config(
+    workload_config: dict[str, Any], rng: random.Random
+) -> list[tuple[float, Pod | list[Pod]]]:
     """
     Build workload events from configuration.
 
@@ -141,10 +146,10 @@ def build_workload_from_config(workload_config: Dict[str, Any],
     Returns:
         List of (submit_time, pod_or_gang) events.
     """
-    wtype = workload_config.get('type', 'synthetic')
+    wtype = workload_config.get("type", "synthetic")
 
-    if wtype == 'trace':
-        trace_file = workload_config.get('file')
+    if wtype == "trace":
+        trace_file = workload_config.get("file")
         if not trace_file:
             raise ValueError("Trace file not specified in workload config.")
         events = load_trace_from_csv(trace_file)
@@ -152,14 +157,14 @@ def build_workload_from_config(workload_config: Dict[str, Any],
         # The trace loader can return the same format.
         return events
 
-    elif wtype == 'synthetic':
+    elif wtype == "synthetic":
         return generate_synthetic_workload(workload_config, rng)
 
     else:
         raise ValueError(f"Unknown workload type: {wtype}")
 
 
-def load_trace_from_csv(csv_file: str) -> List[Tuple[float, Union[Pod, List[Pod]]]]:
+def load_trace_from_csv(csv_file: str) -> list[tuple[float, Pod | list[Pod]]]:
     """
     Load workload trace from a CSV file.
 
@@ -176,15 +181,15 @@ def load_trace_from_csv(csv_file: str) -> List[Tuple[float, Union[Pod, List[Pod]
         List of (time, pod_or_gang) events.
     """
     events_by_time = defaultdict(list)
-    with open(csv_file, 'r') as f:
+    with open(csv_file, "r") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            t = float(row['time'])
-            uid = row.get('uid', f"pod-{len(events_by_time)}")
-            cpu = float(row.get('cpu', 0.0))
-            memory = float(row.get('memory', 0.0))
-            gpu = int(row.get('gpu', 0))
-            gang_id = row.get('gang_id', None)
+            t = float(row["time"])
+            uid = row.get("uid", f"pod-{len(events_by_time)}")
+            cpu = float(row.get("cpu", 0.0))
+            memory = float(row.get("memory", 0.0))
+            gpu = int(row.get("gpu", 0))
+            gang_id = row.get("gang_id", None)
             pod = Pod(
                 uid=uid,
                 name=uid,
@@ -197,8 +202,8 @@ def load_trace_from_csv(csv_file: str) -> List[Tuple[float, Union[Pod, List[Pod]
     events = []
     for t, items in events_by_time.items():
         # Separate gang and non-gang
-        gangs: Dict[str, List[Pod]] = defaultdict(list)
-        non_gang: List[Pod] = []
+        gangs: dict[str, list[Pod]] = defaultdict(list)
+        non_gang: list[Pod] = []
         for gang_id, pod in items:
             if gang_id:
                 gangs[gang_id].append(pod)
@@ -214,8 +219,9 @@ def load_trace_from_csv(csv_file: str) -> List[Tuple[float, Union[Pod, List[Pod]
     return sorted(events, key=lambda x: x[0])
 
 
-def generate_synthetic_workload(config: Dict[str, Any],
-                                rng: random.Random) -> List[Tuple[float, Union[Pod, List[Pod]]]]:
+def generate_synthetic_workload(
+    config: dict[str, Any], rng: random.Random
+) -> list[tuple[float, Pod | list[Pod]]]:
     """
     Generate a synthetic workload based on configuration.
 
@@ -242,13 +248,17 @@ def generate_synthetic_workload(config: Dict[str, Any],
     Returns:
         List of (submit_time, pod_or_gang) events.
     """
-    num_pods = config.get('num_pods', 100)
-    inter_arrival_cfg = config.get('inter_arrival', {'type': 'exponential', 'mean': 5.0})
-    cpu_cfg = config.get('cpu', {'type': 'uniform', 'min': 0.5, 'max': 2.0})
-    memory_cfg = config.get('memory', {'type': 'uniform', 'min': 1.0, 'max': 4.0})
-    gpu_cfg = config.get('gpu', {'type': 'choice', 'values': [0, 0, 1]})  # default 1/3 GPU
-    gang_prob = config.get('gang_prob', 0.2)
-    gang_size_cfg = config.get('gang_size', {'type': 'uniform', 'min': 2, 'max': 5})
+    num_pods = config.get("num_pods", 100)
+    inter_arrival_cfg = config.get(
+        "inter_arrival", {"type": "exponential", "mean": 5.0}
+    )
+    cpu_cfg = config.get("cpu", {"type": "uniform", "min": 0.5, "max": 2.0})
+    memory_cfg = config.get("memory", {"type": "uniform", "min": 1.0, "max": 4.0})
+    gpu_cfg = config.get(
+        "gpu", {"type": "choice", "values": [0, 0, 1]}
+    )  # default 1/3 GPU
+    gang_prob = config.get("gang_prob", 0.2)
+    gang_size_cfg = config.get("gang_size", {"type": "uniform", "min": 2, "max": 5})
 
     events = []
     current_time = 0.0
@@ -285,7 +295,9 @@ def generate_synthetic_workload(config: Dict[str, Any],
                 pod = Pod(
                     uid=uid,
                     name=uid,
-                    resources=ResourceRequest(cpu=cpu_pod, memory=memory_pod, gpu=gpu_pod),
+                    resources=ResourceRequest(
+                        cpu=cpu_pod, memory=memory_pod, gpu=gpu_pod
+                    ),
                     gang_id=gang_id,
                 )
                 gang_pods.append(pod)
@@ -305,7 +317,7 @@ def generate_synthetic_workload(config: Dict[str, Any],
     return events
 
 
-def sample_distribution(dist_cfg: Dict[str, Any], rng: random.Random) -> Union[float, int]:
+def sample_distribution(dist_cfg: dict[str, Any], rng: random.Random) -> float | int:
     """
     Sample a value from a distribution described by a configuration dictionary.
 
@@ -323,29 +335,29 @@ def sample_distribution(dist_cfg: Dict[str, Any], rng: random.Random) -> Union[f
     Returns:
         Sampled value (float or int).
     """
-    dtype = dist_cfg.get('type', 'constant')
+    dtype = dist_cfg.get("type", "constant")
 
-    if dtype == 'constant':
-        return dist_cfg.get('value', 0.0)
+    if dtype == "constant":
+        return dist_cfg.get("value", 0.0)
 
-    elif dtype == 'uniform':
-        min_val = dist_cfg.get('min', 0.0)
-        max_val = dist_cfg.get('max', 1.0)
+    elif dtype == "uniform":
+        min_val = dist_cfg.get("min", 0.0)
+        max_val = dist_cfg.get("max", 1.0)
         return rng.uniform(min_val, max_val)
 
-    elif dtype == 'exponential':
-        mean = dist_cfg.get('mean', 1.0)
+    elif dtype == "exponential":
+        mean = dist_cfg.get("mean", 1.0)
         # rate = 1/mean
         return rng.expovariate(1.0 / mean) if mean > 0 else 0.0
 
-    elif dtype == 'normal':
-        mean = dist_cfg.get('mean', 0.0)
-        std = dist_cfg.get('std', 1.0)
+    elif dtype == "normal":
+        mean = dist_cfg.get("mean", 0.0)
+        std = dist_cfg.get("std", 1.0)
         return rng.gauss(mean, std)
 
-    elif dtype == 'choice':
-        values = dist_cfg.get('values', [0])
-        weights = dist_cfg.get('weights', None)
+    elif dtype == "choice":
+        values = dist_cfg.get("values", [0])
+        weights = dist_cfg.get("weights", None)
         if weights is None:
             return rng.choice(values)
         else:
@@ -359,8 +371,10 @@ def sample_distribution(dist_cfg: Dict[str, Any], rng: random.Random) -> Union[f
 # Experiment Runner
 # -------------------------------------------------------------------------
 
-def run_experiment(config: Dict[str, Any], output_dir: str,
-                   seed: Optional[int] = None, plot: bool = False) -> SimulationStats:
+
+def run_experiment(
+    config: dict[str, Any], output_dir: str, seed: int | None = None, plot: bool = False
+) -> SimulationStats:
     """
     Run a single simulation experiment based on the configuration.
 
@@ -379,33 +393,33 @@ def run_experiment(config: Dict[str, Any], output_dir: str,
 
     # Determine seed
     if seed is None:
-        seed = config.get('simulation', {}).get('seed', 42)
+        seed = config.get("simulation", {}).get("seed", 42)
     rng = random.Random(seed)
 
     # Build cluster
-    cluster_cfg = config['cluster']
+    cluster_cfg = config["cluster"]
     cluster = build_cluster_from_config(cluster_cfg)
 
     # Build workload
-    workload_cfg = config.get('workload', {})
+    workload_cfg = config.get("workload", {})
     workload_events = build_workload_from_config(workload_cfg, rng)
 
     # Scheduler policy
-    policy = config.get('simulation', {}).get('policy', 'bestfit')
+    policy = config.get("simulation", {}).get("policy", "bestfit")
     scheduler = Scheduler(cluster, policy_name=policy, seed=seed)
 
     # Runtime function: from config or default
-    runtime_type = config.get('simulation', {}).get('runtime_function', 'default')
-    if runtime_type == 'default':
+    runtime_type = config.get("simulation", {}).get("runtime_function", "default")
+    if runtime_type == "default":
         runtime_func = default_runtime_func
-    elif runtime_type == 'resource_based':
+    elif runtime_type == "resource_based":
         runtime_func = resource_based_runtime
     else:
         runtime_func = default_runtime_func  # fallback
 
     # Simulation parameters
-    until = config.get('simulation', {}).get('until', 10000.0)
-    log_interval = config.get('simulation', {}).get('log_interval', None)
+    until = config.get("simulation", {}).get("until", 10000.0)
+    log_interval = config.get("simulation", {}).get("log_interval", None)
 
     # Create simulator
     sim = Simulator(
@@ -429,55 +443,87 @@ def run_experiment(config: Dict[str, Any], output_dir: str,
     json_file = out_path / f"{output_prefix}_stats.json"
 
     # Save to CSV
-    with open(csv_file, 'w', newline='') as f:
+    with open(csv_file, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(['metric', 'value'])
-        writer.writerow(['total_pods_submitted', stats.total_pods_submitted])
-        writer.writerow(['total_pods_scheduled', stats.total_pods_scheduled])
-        writer.writerow(['total_pods_completed', stats.total_pods_completed])
-        writer.writerow(['total_pods_failed', stats.total_pods_failed])
-        writer.writerow(['avg_wait_time', sum(stats.wait_times)/len(stats.wait_times) if stats.wait_times else 0])
-        writer.writerow(['avg_run_time', sum(stats.run_times)/len(stats.run_times) if stats.run_times else 0])
-        writer.writerow(['avg_turnaround_time', sum(stats.turnaround_times)/len(stats.turnaround_times) if stats.turnaround_times else 0])
-        writer.writerow(['min_wait_time', min(stats.wait_times) if stats.wait_times else 0])
-        writer.writerow(['max_wait_time', max(stats.wait_times) if stats.wait_times else 0])
+        writer.writerow(["metric", "value"])
+        writer.writerow(["total_pods_submitted", stats.total_pods_submitted])
+        writer.writerow(["total_pods_scheduled", stats.total_pods_scheduled])
+        writer.writerow(["total_pods_completed", stats.total_pods_completed])
+        writer.writerow(["total_pods_failed", stats.total_pods_failed])
+        writer.writerow(
+            [
+                "avg_wait_time",
+                sum(stats.wait_times) / len(stats.wait_times)
+                if stats.wait_times
+                else 0,
+            ]
+        )
+        writer.writerow(
+            [
+                "avg_run_time",
+                sum(stats.run_times) / len(stats.run_times) if stats.run_times else 0,
+            ]
+        )
+        writer.writerow(
+            [
+                "avg_turnaround_time",
+                sum(stats.turnaround_times) / len(stats.turnaround_times)
+                if stats.turnaround_times
+                else 0,
+            ]
+        )
+        writer.writerow(
+            ["min_wait_time", min(stats.wait_times) if stats.wait_times else 0]
+        )
+        writer.writerow(
+            ["max_wait_time", max(stats.wait_times) if stats.wait_times else 0]
+        )
         # Percentiles
         if stats.wait_times:
             sorted_wait = sorted(stats.wait_times)
-            writer.writerow(['p50_wait_time', sorted_wait[int(len(sorted_wait)*0.5)]])
-            writer.writerow(['p90_wait_time', sorted_wait[int(len(sorted_wait)*0.9)]])
-            writer.writerow(['p99_wait_time', sorted_wait[int(len(sorted_wait)*0.99)]])
+            writer.writerow(["p50_wait_time", sorted_wait[int(len(sorted_wait) * 0.5)]])
+            writer.writerow(["p90_wait_time", sorted_wait[int(len(sorted_wait) * 0.9)]])
+            writer.writerow(
+                ["p99_wait_time", sorted_wait[int(len(sorted_wait) * 0.99)]]
+            )
 
     # Save to JSON
     stats_dict = {
-        'total_pods_submitted': stats.total_pods_submitted,
-        'total_pods_scheduled': stats.total_pods_scheduled,
-        'total_pods_completed': stats.total_pods_completed,
-        'total_pods_failed': stats.total_pods_failed,
-        'wait_times': stats.wait_times,
-        'run_times': stats.run_times,
-        'turnaround_times': stats.turnaround_times,
-        'avg_wait_time': sum(stats.wait_times)/len(stats.wait_times) if stats.wait_times else 0,
-        'avg_run_time': sum(stats.run_times)/len(stats.run_times) if stats.run_times else 0,
-        'avg_turnaround_time': sum(stats.turnaround_times)/len(stats.turnaround_times) if stats.turnaround_times else 0,
-        'final_utilization': cluster.get_cluster_utilization(),
+        "total_pods_submitted": stats.total_pods_submitted,
+        "total_pods_scheduled": stats.total_pods_scheduled,
+        "total_pods_completed": stats.total_pods_completed,
+        "total_pods_failed": stats.total_pods_failed,
+        "wait_times": stats.wait_times,
+        "run_times": stats.run_times,
+        "turnaround_times": stats.turnaround_times,
+        "avg_wait_time": sum(stats.wait_times) / len(stats.wait_times)
+        if stats.wait_times
+        else 0,
+        "avg_run_time": sum(stats.run_times) / len(stats.run_times)
+        if stats.run_times
+        else 0,
+        "avg_turnaround_time": sum(stats.turnaround_times) / len(stats.turnaround_times)
+        if stats.turnaround_times
+        else 0,
+        "final_utilization": cluster.get_cluster_utilization(),
     }
-    with open(json_file, 'w') as f:
+    with open(json_file, "w") as f:
         json.dump(stats_dict, f, indent=2)
 
     # Optionally generate plots
     if plot:
         try:
             import matplotlib.pyplot as plt
+
             # Plot CDF of wait times
             if stats.wait_times:
                 plt.figure()
                 sorted_wait = sorted(stats.wait_times)
-                cdf = [i/len(sorted_wait) for i in range(len(sorted_wait))]
-                plt.plot(sorted_wait, cdf, label='Wait Time CDF')
-                plt.xlabel('Wait Time')
-                plt.ylabel('CDF')
-                plt.title(f'Wait Time CDF - Policy: {policy}')
+                cdf = [i / len(sorted_wait) for i in range(len(sorted_wait))]
+                plt.plot(sorted_wait, cdf, label="Wait Time CDF")
+                plt.xlabel("Wait Time")
+                plt.ylabel("CDF")
+                plt.title(f"Wait Time CDF - Policy: {policy}")
                 plt.grid(True)
                 plt.savefig(out_path / f"{output_prefix}_wait_cdf.png")
                 plt.close()
@@ -496,36 +542,35 @@ def run_experiment(config: Dict[str, Any], output_dir: str,
 # Main Entry Point
 # -------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Run Kubernetes scheduler simulation experiments."
     )
     parser.add_argument(
-        '--config', '-c', required=True,
-        help='Path to YAML configuration file.'
+        "--config", "-c", required=True, help="Path to YAML configuration file."
     )
     parser.add_argument(
-        '--output', '-o', default='results',
-        help='Output directory for results (default: results/).'
+        "--output",
+        "-o",
+        default="results",
+        help="Output directory for results (default: results/).",
     )
     parser.add_argument(
-        '--seed', type=int, default=None,
-        help='Random seed (overrides config).'
+        "--seed", type=int, default=None, help="Random seed (overrides config)."
     )
     parser.add_argument(
-        '--plot', action='store_true',
-        help='Generate plots (requires matplotlib).'
+        "--plot", action="store_true", help="Generate plots (requires matplotlib)."
     )
     parser.add_argument(
-        '--verbose', '-v', action='store_true',
-        help='Enable verbose logging.'
+        "--verbose", "-v", action="store_true", help="Enable verbose logging."
     )
     args = parser.parse_args()
 
     # Setup logging
     logging.basicConfig(
         level=logging.INFO if args.verbose else logging.WARNING,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
     # Load config
@@ -541,9 +586,13 @@ def main():
 
     print(f"\nExperiment completed. Results saved to {args.output}")
     print(f"Total pods completed: {stats.total_pods_completed}")
-    print(f"Average wait time: {sum(stats.wait_times)/len(stats.wait_times) if stats.wait_times else 0:.2f}")
-    print(f"Average turnaround time: {sum(stats.turnaround_times)/len(stats.turnaround_times) if stats.turnaround_times else 0:.2f}")
+    print(
+        f"Average wait time: {sum(stats.wait_times) / len(stats.wait_times) if stats.wait_times else 0:.2f}"
+    )
+    print(
+        f"Average turnaround time: {sum(stats.turnaround_times) / len(stats.turnaround_times) if stats.turnaround_times else 0:.2f}"
+    )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

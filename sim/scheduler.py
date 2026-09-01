@@ -2,15 +2,14 @@
 sim/scheduler.py – Scheduler with plugin‑based scoring (updated).
 """
 
-from typing import List, Optional, Dict, Any, Callable
 import random
 from collections import defaultdict
 
 from .cluster import Cluster
-from .pod import Pod, ResourceRequest
+from .config import KubeSchedulerConfiguration
 from .node import Node
-from .config import KubeSchedulerConfiguration, Plugin
-from .plugins import instantiate_plugin, ScoringPlugin
+from .plugins import instantiate_plugin
+from .pod import Pod, ResourceRequest
 
 
 class Scheduler:
@@ -18,11 +17,13 @@ class Scheduler:
     Scheduler that uses a list of scoring plugins to select the best node.
     """
 
-    def __init__(self,
-                 cluster: Cluster,
-                 policy: Optional[str] = None,
-                 config: Optional[KubeSchedulerConfiguration] = None,
-                 seed: Optional[int] = None):
+    def __init__(
+        self,
+        cluster: Cluster,
+        policy: str | None = None,
+        config: KubeSchedulerConfiguration | None = None,
+        seed: int | None = None,
+    ):
         """
         Initialise the scheduler.
 
@@ -35,14 +36,16 @@ class Scheduler:
         """
         self.cluster = cluster
         self.rng = random.Random(seed) if seed is not None else random.Random()
-        self._plugins: List[tuple] = []  # (plugin_instance, weight)
+        self._plugins: list[tuple] = []  # (plugin_instance, weight)
 
         if config:
             # Use plugin configuration
             plugins_with_weights = config.get_plugins_with_weights()
             for p in plugins_with_weights:
                 plugin_args = config.get_plugin_args(p.name)
-                plugin_instance = instantiate_plugin(p.name, args=plugin_args, seed=seed)
+                plugin_instance = instantiate_plugin(
+                    p.name, args=plugin_args, seed=seed
+                )
                 self._plugins.append((plugin_instance, p.weight))
         elif policy:
             # Legacy mode: convert policy name to a single plugin
@@ -77,14 +80,14 @@ class Scheduler:
             total += score * weight
         return total
 
-    def _compute_gang_node_score(self, gang_pods: List[Pod], node: Node) -> float:
+    def _compute_gang_node_score(self, gang_pods: list[Pod], node: Node) -> float:
         """
         Compute the total weighted score for a gang on a node.
         For FGDScore, we need to check if the node can fit all pods.
         """
         total = 0.0
         for plugin, weight in self._plugins:
-            if hasattr(plugin, 'ScoreGang'):
+            if hasattr(plugin, "ScoreGang"):
                 score = plugin.ScoreGang(gang_pods, node, self.cluster)
             else:
                 # For non‑gang plugins, we need to aggregate scores over pods?
@@ -114,11 +117,14 @@ class Scheduler:
 
         # Score each node
         best_node = None
-        best_score = -float('inf')
+        best_score = -float("inf")
         for node in feasible:
             score = self._compute_node_score(pod, node)
             # Tie‑break by node name for determinism
-            if score > best_score or (score == best_score and (best_node is None or node.name < best_node.name)):
+            if score > best_score or (
+                score == best_score
+                and (best_node is None or node.name < best_node.name)
+            ):
                 best_score = score
                 best_node = node
 
@@ -128,7 +134,7 @@ class Scheduler:
         self.cluster.assign_pod_to_node(pod, best_node)
         return True
 
-    def schedule_gang(self, gang_pods: List[Pod]) -> bool:
+    def schedule_gang(self, gang_pods: list[Pod]) -> bool:
         """
         Schedule a gang of pods atomically using plugin‑based scoring.
         Returns True if the entire gang is placed on one node.
@@ -147,9 +153,11 @@ class Scheduler:
         feasible = []
         for node in self.cluster.nodes:
             free = node.get_free_resources()
-            if (total_req.cpu <= free.cpu and
-                total_req.memory <= free.memory and
-                total_req.gpu <= free.gpu):
+            if (
+                total_req.cpu <= free.cpu
+                and total_req.memory <= free.memory
+                and total_req.gpu <= free.gpu
+            ):
                 feasible.append(node)
 
         if not feasible:
@@ -157,10 +165,13 @@ class Scheduler:
 
         # Score each feasible node
         best_node = None
-        best_score = -float('inf')
+        best_score = -float("inf")
         for node in feasible:
             score = self._compute_gang_node_score(gang_pods, node)
-            if score > best_score or (score == best_score and (best_node is None or node.name < best_node.name)):
+            if score > best_score or (
+                score == best_score
+                and (best_node is None or node.name < best_node.name)
+            ):
                 best_score = score
                 best_node = node
 
@@ -191,17 +202,17 @@ class Scheduler:
                 non_gang_pods.append(p)
 
         # Schedule gangs first
-        for gang_id, gang_pods in gangs.items():
+        for gang_pods in gangs.values():
             still_pending = [p for p in gang_pods if p in self.cluster.pending_pods]
-            if len(still_pending) == len(gang_pods):
-                if self.schedule_gang(still_pending):
-                    scheduled_count += len(still_pending)
+            if len(still_pending) == len(gang_pods) and self.schedule_gang(
+                still_pending
+            ):
+                scheduled_count += len(still_pending)
 
         # Schedule non‑gang pods
         for p in non_gang_pods:
-            if p in self.cluster.pending_pods:
-                if self.schedule_pod(p):
-                    scheduled_count += 1
+            if p in self.cluster.pending_pods and self.schedule_pod(p):
+                scheduled_count += 1
 
         return scheduled_count
 

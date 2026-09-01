@@ -27,17 +27,20 @@ Usage example:
     print(stats)
 """
 
-import simpy
-import random
 import logging
-from typing import List, Optional, Dict, Any, Callable, Union, Tuple
+
+logger = logging.getLogger(__name__)
+import random
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
+
+import simpy
 
 from .cluster import Cluster
 from .pod import Pod, ResourceRequest
 from .scheduler import Scheduler
-from .node import Node
 
 
 # Default runtime function: exponential with mean 60 time units
@@ -76,14 +79,15 @@ def resource_based_runtime(pod: Pod, rng: random.Random) -> float:
 @dataclass
 class SimulationStats:
     """Container for simulation statistics."""
+
     total_pods_submitted: int = 0
     total_pods_scheduled: int = 0
     total_pods_completed: int = 0
     total_pods_failed: int = 0
-    wait_times: List[float] = field(default_factory=list)
-    run_times: List[float] = field(default_factory=list)
-    turnaround_times: List[float] = field(default_factory=list)
-    cluster_utilization_history: List[Tuple[float, Dict[str, float]]] = field(
+    wait_times: list[float] = field(default_factory=list)
+    run_times: list[float] = field(default_factory=list)
+    turnaround_times: list[float] = field(default_factory=list)
+    cluster_utilization_history: list[tuple[float, dict[str, float]]] = field(
         default_factory=list
     )
     # Per-node utilization can be added if needed
@@ -109,10 +113,10 @@ class Simulator:
         self,
         cluster: Cluster,
         scheduler: Scheduler,
-        workload_events: List[Tuple[float, Union[Pod, List[Pod]]]],
-        runtime_func: Optional[Callable[[Pod, random.Random], float]] = None,
-        seed: Optional[int] = None,
-        log_interval: Optional[float] = None,
+        workload_events: list[tuple[float, Pod | list[Pod]]],
+        runtime_func: Callable[[Pod, random.Random], float] | None = None,
+        seed: int | None = None,
+        log_interval: float | None = None,
     ) -> None:
         """
         Initialise the simulator.
@@ -141,13 +145,13 @@ class Simulator:
         self._last_log_time = 0.0
 
         # Internal state for pending gang tracking
-        self._pending_gang_pods: Dict[str, List[Pod]] = defaultdict(list)
+        self._pending_gang_pods: dict[str, list[Pod]] = defaultdict(list)
 
     # -------------------------------------------------------------------------
     # Core Event Handlers
     # -------------------------------------------------------------------------
 
-    def _arrival(self, submit_time: float, pod_or_gang: Union[Pod, List[Pod]]) -> None:
+    def _arrival(self, submit_time: float, pod_or_gang: Pod | list[Pod]) -> None:
         """
         Handle a pod or gang arrival event.
 
@@ -161,7 +165,9 @@ class Simulator:
         """
         yield self.env.timeout(submit_time - self.env.now)
 
-        self.stats.total_pods_submitted += 1 if isinstance(pod_or_gang, Pod) else len(pod_or_gang)
+        self.stats.total_pods_submitted += (
+            1 if isinstance(pod_or_gang, Pod) else len(pod_or_gang)
+        )
 
         if isinstance(pod_or_gang, Pod):
             pod = pod_or_gang
@@ -225,7 +231,7 @@ class Simulator:
         try:
             self.cluster.remove_pod_from_node(pod)
         except ValueError as e:
-            logging.warning(f"Error removing pod {pod.uid}: {e}")
+            logger.warning(f"Error removing pod {pod.uid}: {e}")
             # If removal fails (should not happen), mark as failed
             pod.state = "failed"
             self.stats.total_pods_failed += 1
@@ -273,13 +279,15 @@ class Simulator:
             # start the process for all running pods that don't have a finish_time.
             for node in self.cluster.nodes:
                 for p in node.pods:
-                    if p.state == "running" and p.finish_time is None:
-                        # This pod is running but hasn't been scheduled for completion yet.
-                        # Check if it already has a process (we can't easily know).
-                        # We'll use a pod attribute `_process_started` to avoid duplicates.
-                        if not hasattr(p, '_process_started') or not p._process_started:
-                            p._process_started = True
-                            self.env.process(self._run_pod(p))
+                    if (
+                        p.state == "running"
+                        and p.finish_time is None
+                        and (
+                            not hasattr(p, "_process_started") or not p._process_started
+                        )
+                    ):
+                        p._process_started = True
+                        self.env.process(self._run_pod(p))
 
             # The above is a bit hacky but works. Alternatively, we could have the
             # scheduler return the list of scheduled pods and start processes there.
@@ -332,15 +340,25 @@ class Simulator:
         completed = self.stats.total_pods_completed
         total_submitted = self.stats.total_pods_submitted
         util = self.cluster.get_cluster_utilization()
-        avg_wait = sum(self.stats.wait_times) / len(self.stats.wait_times) if self.stats.wait_times else 0.0
-        avg_turnaround = sum(self.stats.turnaround_times) / len(self.stats.turnaround_times) if self.stats.turnaround_times else 0.0
+        avg_wait = (
+            sum(self.stats.wait_times) / len(self.stats.wait_times)
+            if self.stats.wait_times
+            else 0.0
+        )
+        avg_turnaround = (
+            sum(self.stats.turnaround_times) / len(self.stats.turnaround_times)
+            if self.stats.turnaround_times
+            else 0.0
+        )
 
         status = "FINAL" if final else "PROGRESS"
-        print(f"[{status} at t={current_time:.2f}] "
-              f"Submitted={total_submitted}, Scheduled={completed+pending+running}, "
-              f"Completed={completed}, Pending={pending}, Running={running}, "
-              f"AvgWait={avg_wait:.2f}, AvgTurnaround={avg_turnaround:.2f}, "
-              f"Util: CPU={util['cpu']:.2f}, Mem={util['memory']:.2f}, GPU={util['gpu']:.2f}")
+        print(
+            f"[{status} at t={current_time:.2f}] "
+            f"Submitted={total_submitted}, Scheduled={completed + pending + running}, "
+            f"Completed={completed}, Pending={pending}, Running={running}, "
+            f"AvgWait={avg_wait:.2f}, AvgTurnaround={avg_turnaround:.2f}, "
+            f"Util: CPU={util['cpu']:.2f}, Mem={util['memory']:.2f}, GPU={util['gpu']:.2f}"
+        )
 
         self._last_log_time = current_time
 
@@ -357,7 +375,7 @@ class Simulator:
         """
         return self.stats
 
-    def get_utilization_history(self) -> List[Tuple[float, Dict[str, float]]]:
+    def get_utilization_history(self) -> list[tuple[float, dict[str, float]]]:
         """
         Return the history of cluster utilisation over time.
 
@@ -374,7 +392,9 @@ class Simulator:
     # -------------------------------------------------------------------------
 
     @staticmethod
-    def load_workload_from_trace(trace: List[Dict[str, Any]]) -> List[Tuple[float, Union[Pod, List[Pod]]]]:
+    def load_workload_from_trace(
+        trace: list[dict[str, Any]],
+    ) -> list[tuple[float, Pod | list[Pod]]]:
         """
         Convert a trace (list of dicts) into the workload_events format.
 
@@ -404,8 +424,9 @@ class Simulator:
         """
         # Group by (time, gang_id) to form gangs
         from collections import defaultdict
-        grouped: Dict[Tuple[float, str], List[Pod]] = defaultdict(list)
-        single_pods: List[Tuple[float, Pod]] = []
+
+        grouped: dict[tuple[float, str], list[Pod]] = defaultdict(list)
+        single_pods: list[tuple[float, Pod]] = []
 
         for entry in trace:
             t = entry["time"]

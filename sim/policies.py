@@ -28,18 +28,21 @@ For gang scheduling:
             cluster.assign_pod_to_node(p, node)
 """
 
-from typing import List, Optional, Dict, Callable
 import random
-from .cluster import Cluster
-from .pod import Pod, ResourceRequest
-from .node import Node
+from collections.abc import Callable
 
+from .cluster import Cluster
+from .node import Node
+from .pod import Pod, ResourceRequest
 
 # -------------------------------------------------------------------------
 # Non-Gang Policies
 # -------------------------------------------------------------------------
 
-def bestfit(pod: Pod, cluster: Cluster, rng: random.Random = None) -> Optional[Node]:
+
+def bestfit(
+    pod: Pod, cluster: Cluster, rng: random.Random | None = None
+) -> Node | None:
     """
     Best-fit scheduling: place the pod on the feasible node that has the
     least remaining resources after placing the pod (i.e., tightest fit).
@@ -61,7 +64,7 @@ def bestfit(pod: Pod, cluster: Cluster, rng: random.Random = None) -> Optional[N
         The chosen Node, or None if no node can fit the pod.
     """
     best_node = None
-    best_score = float('inf')
+    best_score = float("inf")
 
     for node in cluster.nodes:
         if not node.can_fit(pod.resources):
@@ -69,26 +72,32 @@ def bestfit(pod: Pod, cluster: Cluster, rng: random.Random = None) -> Optional[N
 
         # Compute remaining resources after adding the pod
         remaining_cpu = node.capacity.cpu - node.allocated.cpu - pod.resources.cpu
-        remaining_mem = node.capacity.memory - node.allocated.memory - pod.resources.memory
+        remaining_mem = (
+            node.capacity.memory - node.allocated.memory - pod.resources.memory
+        )
         remaining_gpu = node.capacity.gpu - node.allocated.gpu - pod.resources.gpu
 
         # Normalise by total capacity to get fractional scores
         cpu_frac = remaining_cpu / node.capacity.cpu if node.capacity.cpu > 0 else 0.0
-        mem_frac = remaining_mem / node.capacity.memory if node.capacity.memory > 0 else 0.0
+        mem_frac = (
+            remaining_mem / node.capacity.memory if node.capacity.memory > 0 else 0.0
+        )
         gpu_frac = remaining_gpu / node.capacity.gpu if node.capacity.gpu > 0 else 0.0
 
         # Score = sum of fractions (lower is tighter)
         score = cpu_frac + mem_frac + gpu_frac
 
         # Tie‑break by node name for determinism
-        if score < best_score or (score == best_score and (best_node is None or node.name < best_node.name)):
+        if score < best_score or (
+            score == best_score and (best_node is None or node.name < best_node.name)
+        ):
             best_score = score
             best_node = node
 
     return best_node
 
 
-def spread(pod: Pod, cluster: Cluster, rng: random.Random = None) -> Optional[Node]:
+def spread(pod: Pod, cluster: Cluster, rng: random.Random | None = None) -> Node | None:
     """
     Spread scheduling: place the pod on the feasible node that currently
     has the fewest running pods. This balances load across the cluster.
@@ -129,7 +138,9 @@ def spread(pod: Pod, cluster: Cluster, rng: random.Random = None) -> Optional[No
     return best_candidates[0]
 
 
-def gpupack(pod: Pod, cluster: Cluster, rng: random.Random = None) -> Optional[Node]:
+def gpupack(
+    pod: Pod, cluster: Cluster, rng: random.Random | None = None
+) -> Node | None:
     """
     GPU‑packing scheduling: for pods that request GPUs, try to place them on
     nodes that already have GPU usage, to concentrate GPU workloads and
@@ -164,19 +175,26 @@ def gpupack(pod: Pod, cluster: Cluster, rng: random.Random = None) -> Optional[N
     # Prefer nodes with GPUs already allocated (to pack)
     if gpu_nodes:
         # Sort by GPU utilisation descending (pack tightest), then by name
-        gpu_nodes.sort(key=lambda n: (n.allocated.gpu / n.capacity.gpu if n.capacity.gpu > 0 else 0.0),
-                       reverse=True)
+        gpu_nodes.sort(
+            key=lambda n: (
+                n.allocated.gpu / n.capacity.gpu if n.capacity.gpu > 0 else 0.0
+            ),
+            reverse=True,
+        )
         # Tie‑break by node name
         gpu_nodes.sort(key=lambda n: n.name)
         return gpu_nodes[0]  # after reverse sort, highest utilisation first
     else:
         # No GPU nodes, pick the one with most free GPU capacity
-        non_gpu_nodes.sort(key=lambda n: (n.get_free_resources().gpu, n.name),
-                           reverse=True)
+        non_gpu_nodes.sort(
+            key=lambda n: (n.get_free_resources().gpu, n.name), reverse=True
+        )
         return non_gpu_nodes[0]
 
 
-def random_policy(pod: Pod, cluster: Cluster, rng: random.Random = None) -> Optional[Node]:
+def random_policy(
+    pod: Pod, cluster: Cluster, rng: random.Random | None = None
+) -> Node | None:
     """
     Random scheduling: randomly pick a feasible node.
 
@@ -204,7 +222,10 @@ def random_policy(pod: Pod, cluster: Cluster, rng: random.Random = None) -> Opti
 # Gang Scheduling Policy
 # -------------------------------------------------------------------------
 
-def fgd(gang_pods: List[Pod], cluster: Cluster, rng: random.Random = None) -> Optional[Node]:
+
+def fgd(
+    gang_pods: list[Pod], cluster: Cluster, rng: random.Random | None = None
+) -> Node | None:
     """
     First Gang Deployed (FGD) scheduling: place all pods of a gang together
     on a single node. This is a hard constraint: the node must have enough
@@ -238,14 +259,19 @@ def fgd(gang_pods: List[Pod], cluster: Cluster, rng: random.Random = None) -> Op
     for node in cluster.nodes:
         # Check if the node can fit the combined request
         free = node.get_free_resources()
-        if (total_req.cpu <= free.cpu and
-            total_req.memory <= free.memory and
-            total_req.gpu <= free.gpu):
+        if (
+            total_req.cpu <= free.cpu
+            and total_req.memory <= free.memory
+            and total_req.gpu <= free.gpu
+        ):
             return node
 
     return None
 
-def dotproduct(pod: Pod, cluster: Cluster, rng: random.Random = None) -> Optional[Node]:
+
+def dotproduct(
+    pod: Pod, cluster: Cluster, rng: random.Random | None = None
+) -> Node | None:
     """
     Dot‑product scoring: score = pod_request · node_free_resources.
     The node with the highest dot product is selected.
@@ -260,7 +286,7 @@ def dotproduct(pod: Pod, cluster: Cluster, rng: random.Random = None) -> Optiona
         The node with the highest dot‑product score, or None if no node can fit.
     """
     best_node = None
-    best_score = -float('inf')
+    best_score = -float("inf")
 
     for node in cluster.nodes:
         if not node.can_fit(pod.resources):
@@ -268,18 +294,25 @@ def dotproduct(pod: Pod, cluster: Cluster, rng: random.Random = None) -> Optiona
 
         free = node.get_free_resources()
         # Dot product of pod request and free resources
-        score = (pod.resources.cpu * free.cpu +
-                 pod.resources.memory * free.memory +
-                 pod.resources.gpu * free.gpu)
+        score = (
+            pod.resources.cpu * free.cpu
+            + pod.resources.memory * free.memory
+            + pod.resources.gpu * free.gpu
+        )
 
         # Tie‑break by node name for determinism
-        if score > best_score or (score == best_score and (best_node is None or node.name < best_node.name)):
+        if score > best_score or (
+            score == best_score and (best_node is None or node.name < best_node.name)
+        ):
             best_score = score
             best_node = node
 
     return best_node
 
-def gpuclustering(pod: Pod, cluster: Cluster, rng: random.Random = None) -> Optional[Node]:
+
+def gpuclustering(
+    pod: Pod, cluster: Cluster, rng: random.Random | None = None
+) -> Node | None:
     """
     GPU Clustering: concentrate GPU workloads on nodes that already have GPU allocations.
     For pods requesting GPUs: pick the feasible node with the *most* allocated GPUs.
@@ -311,7 +344,8 @@ def gpuclustering(pod: Pod, cluster: Cluster, rng: random.Random = None) -> Opti
         # Additionally, if there are nodes with zero GPU, we pick the first of those
         # But sorting already handles that.
 
-    return feasible[0]   # after sorting, the first node matches the criterion
+    return feasible[0]  # after sorting, the first node matches the criterion
+
 
 # -------------------------------------------------------------------------
 # Policy Registry
@@ -319,7 +353,7 @@ def gpuclustering(pod: Pod, cluster: Cluster, rng: random.Random = None) -> Opti
 
 # A dictionary mapping policy names (as used in configuration) to functions.
 # This allows easy look-up and dynamic selection.
-POLICY_REGISTRY: Dict[str, Callable] = {
+POLICY_REGISTRY: dict[str, Callable] = {
     "bestfit": bestfit,
     "spread": spread,
     "gpupack": gpupack,
@@ -330,8 +364,9 @@ POLICY_REGISTRY: Dict[str, Callable] = {
     "best_fit": bestfit,
     "firstfit": None,  # not implemented explicitly; fallback to bestfit
     "dotproduct": dotproduct,
-    "gpuclustering": gpuclustering  
+    "gpuclustering": gpuclustering,
 }
+
 
 def get_policy(name: str) -> Callable:
     """
@@ -353,15 +388,20 @@ def get_policy(name: str) -> Callable:
         # Fallback: try first-fit (which we treat as bestfit)
         if norm in ("firstfit", "first-fit", "first_fit"):
             return bestfit
-        raise ValueError(f"Unknown policy name: '{name}'. Available: {list(POLICY_REGISTRY.keys())}")
+        raise ValueError(
+            f"Unknown policy name: '{name}'. Available: {list(POLICY_REGISTRY.keys())}"
+        )
     return policy
+
 
 # -------------------------------------------------------------------------
 # Helper: schedule a pod using any policy
 # -------------------------------------------------------------------------
 
-def schedule_pod(pod: Pod, cluster: Cluster, policy_name: str,
-                 rng: random.Random = None) -> Optional[Node]:
+
+def schedule_pod(
+    pod: Pod, cluster: Cluster, policy_name: str, rng: random.Random | None = None
+) -> Node | None:
     """
     Convenience function to schedule a single pod using a named policy.
 

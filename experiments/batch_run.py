@@ -29,38 +29,37 @@ Usage:
         --output batch_results/
 """
 
-import sys
-import os
-import yaml
-import json
-import csv
 import argparse
+import csv
 import itertools
-import subprocess
+import json
 import multiprocessing
+import os
+import subprocess
+import sys
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
-from datetime import datetime
-import tempfile
-import shutil
+from typing import Any
+
+import yaml
 
 # -------------------------------------------------------------------------
 # Utilities
 # -------------------------------------------------------------------------
 
-def load_yaml(filepath: str) -> Dict[str, Any]:
+
+def load_yaml(filepath: str) -> dict[str, Any]:
     """Load YAML file."""
-    with open(filepath, 'r') as f:
+    with open(filepath, "r") as f:
         return yaml.safe_load(f)
 
 
-def save_yaml(data: Dict[str, Any], filepath: str) -> None:
+def save_yaml(data: dict[str, Any], filepath: str) -> None:
     """Save YAML file."""
-    with open(filepath, 'w') as f:
+    with open(filepath, "w") as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
 
-def merge_dicts(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+def merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     """Deep merge two dictionaries."""
     result = base.copy()
     for key, value in override.items():
@@ -71,21 +70,23 @@ def merge_dicts(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any
     return result
 
 
-def parse_sweep_spec(spec: str) -> Tuple[str, List[str]]:
+def parse_sweep_spec(spec: str) -> tuple[str, list[str]]:
     """
     Parse a sweep specification like "policy:bestfit,spread,fgd".
     Returns (key, list_of_values).
     """
-    if ':' not in spec:
-        raise ValueError(f"Invalid sweep spec: {spec}. Expected 'key:value1,value2,...'")
-    key, values_str = spec.split(':', 1)
-    values = [v.strip() for v in values_str.split(',') if v.strip()]
+    if ":" not in spec:
+        raise ValueError(
+            f"Invalid sweep spec: {spec}. Expected 'key:value1,value2,...'"
+        )
+    key, values_str = spec.split(":", 1)
+    values = [v.strip() for v in values_str.split(",") if v.strip()]
     # Try to convert to appropriate types
     converted = []
     for v in values:
         # Try int, float, else string
         try:
-            if '.' in v:
+            if "." in v:
                 converted.append(float(v))
             else:
                 converted.append(int(v))
@@ -94,7 +95,9 @@ def parse_sweep_spec(spec: str) -> Tuple[str, List[str]]:
     return key, converted
 
 
-def flatten_parameters(base_params: Dict[str, Any], sweep_params: Dict[str, List[Any]]) -> List[Dict[str, Any]]:
+def flatten_parameters(
+    base_params: dict[str, Any], sweep_params: dict[str, list[Any]]
+) -> list[dict[str, Any]]:
     """
     Generate all combinations of sweep parameters.
     Returns a list of dicts, each containing the parameter values for one run.
@@ -110,16 +113,18 @@ def flatten_parameters(base_params: Dict[str, Any], sweep_params: Dict[str, List
     return result
 
 
-def update_config_with_params(config: Dict[str, Any], params: Dict[str, Any]) -> Dict[str, Any]:
+def update_config_with_params(
+    config: dict[str, Any], params: dict[str, Any]
+) -> dict[str, Any]:
     """
     Update a configuration dict with parameter values.
     Supports dotted paths like "workload.num_pods" or "simulation.policy".
     """
     result = config.copy()
     for key, value in params.items():
-        if '.' in key:
+        if "." in key:
             # Dotted path: e.g., workload.num_pods
-            parts = key.split('.')
+            parts = key.split(".")
             current = result
             for part in parts[:-1]:
                 if part not in current:
@@ -136,7 +141,10 @@ def update_config_with_params(config: Dict[str, Any], params: Dict[str, Any]) ->
 # Single run execution
 # -------------------------------------------------------------------------
 
-def run_single_experiment(config_file: str, output_dir: str, seed: Optional[int] = None) -> Dict[str, Any]:
+
+def run_single_experiment(
+    config_file: str, output_dir: str, seed: int | None = None
+) -> dict[str, Any]:
     """
     Run a single simulation using the `main.py apply` or `run` command.
     For simplicity, we assume we have a unified config file.
@@ -144,31 +152,35 @@ def run_single_experiment(config_file: str, output_dir: str, seed: Optional[int]
     Returns a dictionary with results (or raises on error).
     """
     cmd = [
-        sys.executable, 'main.py', 'run',
-        '--config', config_file,
-        '--output', output_dir,
+        sys.executable,
+        "main.py",
+        "run",
+        "--config",
+        config_file,
+        "--output",
+        output_dir,
     ]
     if seed is not None:
-        cmd.extend(['--seed', str(seed)])
+        cmd.extend(["--seed", str(seed)])
 
     # Run subprocess
     try:
-        result = subprocess.run(
+        subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             check=True,
-            timeout=3600  # 1 hour timeout
+            timeout=3600,  # 1 hour timeout
         )
         # Parse the JSON stats file
-        stats_file = Path(output_dir) / f"bestfit_stats.json"  # TODO: policy may differ
+        Path(output_dir) / "bestfit_stats.json"  # TODO: policy may differ
         # Actually, the policy is in the config, we need to read it.
         # Better: we can read the config to know the policy.
         # But we can also just scan for a .json file in output_dir
         json_files = list(Path(output_dir).glob("*.json"))
         if not json_files:
             raise RuntimeError(f"No JSON stats file found in {output_dir}")
-        with open(json_files[0], 'r') as f:
+        with open(json_files[0], "r") as f:
             stats = json.load(f)
         return stats
     except subprocess.CalledProcessError as e:
@@ -183,13 +195,16 @@ def run_single_experiment(config_file: str, output_dir: str, seed: Optional[int]
 # Batch orchestrator
 # -------------------------------------------------------------------------
 
-def run_batch(base_config_file: str,
-              sweep_params: Dict[str, List[Any]],
-              runs_per_combination: int,
-              output_dir: str,
-              parallel: int = 1,
-              generate_scripts: bool = False,
-              seeds: Optional[List[int]] = None) -> None:
+
+def run_batch(
+    base_config_file: str,
+    sweep_params: dict[str, list[Any]],
+    runs_per_combination: int,
+    output_dir: str,
+    parallel: int = 1,
+    generate_scripts: bool = False,
+    seeds: list[int] | None = None,
+) -> None:
     """
     Run a batch of experiments.
     """
@@ -209,9 +224,9 @@ def run_batch(base_config_file: str,
             # Create a config file for this specific run
             config = update_config_with_params(base_config, combo)
             # Add the seed to the simulation section (override)
-            if 'simulation' not in config:
-                config['simulation'] = {}
-            config['simulation']['seed'] = seed
+            if "simulation" not in config:
+                config["simulation"] = {}
+            config["simulation"]["seed"] = seed
 
             # Generate a unique output subdirectory
             # Build a descriptive name
@@ -222,20 +237,20 @@ def run_batch(base_config_file: str,
 
             # Create temporary config file
             # We'll use a temp directory or a dedicated configs/ subdir
-            temp_config_dir = Path(output_dir) / 'configs'
+            temp_config_dir = Path(output_dir) / "configs"
             temp_config_dir.mkdir(parents=True, exist_ok=True)
             config_file = temp_config_dir / f"{run_dir_name}.yaml"
             save_yaml(config, config_file)
 
-            output_run_dir = Path(output_dir) / 'results' / run_dir_name
+            output_run_dir = Path(output_dir) / "results" / run_dir_name
             output_run_dir.mkdir(parents=True, exist_ok=True)
 
             work_item = {
-                'config_file': str(config_file),
-                'output_dir': str(output_run_dir),
-                'seed': seed,
-                'params': combo,
-                'run_id': run_idx,
+                "config_file": str(config_file),
+                "output_dir": str(output_run_dir),
+                "seed": seed,
+                "params": combo,
+                "run_id": run_idx,
             }
             all_work_items.append(work_item)
 
@@ -254,30 +269,30 @@ def run_batch(base_config_file: str,
         results = [run_work_item(item) for item in all_work_items]
 
     # Collect results into a summary
-    summary_file = Path(output_dir) / 'summary.json'
-    with open(summary_file, 'w') as f:
+    summary_file = Path(output_dir) / "summary.json"
+    with open(summary_file, "w") as f:
         json.dump(results, f, indent=2)
 
     # Also produce a CSV summary for easy analysis
-    csv_file = Path(output_dir) / 'summary.csv'
+    csv_file = Path(output_dir) / "summary.csv"
     if results:
         # Flatten stats and params
         flat_rows = []
         for res in results:
             row = {}
             # Include parameters
-            for k, v in res['params'].items():
-                row[f'param_{k}'] = v
+            for k, v in res["params"].items():
+                row[f"param_{k}"] = v
             # Include run info
-            row['seed'] = res['seed']
-            row['run_id'] = res['run_id']
+            row["seed"] = res["seed"]
+            row["run_id"] = res["run_id"]
             # Include aggregate stats
-            stats = res.get('stats', {})
+            stats = res.get("stats", {})
             for stat_key, stat_val in stats.items():
                 row[stat_key] = stat_val
             flat_rows.append(row)
 
-        with open(csv_file, 'w', newline='') as f:
+        with open(csv_file, "w", newline="") as f:
             if flat_rows:
                 fieldnames = flat_rows[0].keys()
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -287,48 +302,51 @@ def run_batch(base_config_file: str,
     print(f"Batch completed. Results saved to {output_dir}")
 
 
-def run_work_item(item: Dict[str, Any]) -> Dict[str, Any]:
+def run_work_item(item: dict[str, Any]) -> dict[str, Any]:
     """
     Execute a single work item (for multiprocessing).
     """
     try:
         stats = run_single_experiment(
-            config_file=item['config_file'],
-            output_dir=item['output_dir'],
-            seed=item['seed']
+            config_file=item["config_file"],
+            output_dir=item["output_dir"],
+            seed=item["seed"],
         )
         return {
-            'success': True,
-            'params': item['params'],
-            'seed': item['seed'],
-            'run_id': item['run_id'],
-            'stats': stats,
+            "success": True,
+            "params": item["params"],
+            "seed": item["seed"],
+            "run_id": item["run_id"],
+            "stats": stats,
         }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
+        # Catch-all for any unexpected error during the experiment
         return {
-            'success': False,
-            'params': item['params'],
-            'seed': item['seed'],
-            'run_id': item['run_id'],
-            'error': str(e),
+            "success": False,
+            "params": item["params"],
+            "seed": item["seed"],
+            "run_id": item["run_id"],
+            "error": str(e),
         }
 
 
-def generate_shell_scripts(work_items: List[Dict[str, Any]], output_dir: str) -> None:
+def generate_shell_scripts(work_items: list[dict[str, Any]], output_dir: str) -> None:
     """
     Generate a shell script with all run commands.
     """
-    scripts_dir = Path(output_dir) / 'scripts'
+    scripts_dir = Path(output_dir) / "scripts"
     scripts_dir.mkdir(parents=True, exist_ok=True)
 
     # Single script with all commands
-    script_file = scripts_dir / 'run_all.sh'
-    with open(script_file, 'w') as f:
+    script_file = scripts_dir / "run_all.sh"
+    with open(script_file, "w") as f:
         f.write("#!/bin/bash\n")
         f.write(f"# Generated batch script for {len(work_items)} experiments\n\n")
         for item in work_items:
-            cmd = (f"python main.py run --config {item['config_file']} "
-                   f"--output {item['output_dir']} --seed {item['seed']}")
+            cmd = (
+                f"python main.py run --config {item['config_file']} "
+                f"--output {item['output_dir']} --seed {item['seed']}"
+            )
             f.write(f"echo 'Running {item['run_id']}...'\n")
             f.write(f"{cmd}\n\n")
     os.chmod(script_file, 0o755)
@@ -337,10 +355,12 @@ def generate_shell_scripts(work_items: List[Dict[str, Any]], output_dir: str) ->
     # Also generate individual scripts for each run (optional)
     for item in work_items:
         run_script = scripts_dir / f"run_{item['run_id']}.sh"
-        with open(run_script, 'w') as f:
+        with open(run_script, "w") as f:
             f.write("#!/bin/bash\n")
-            cmd = (f"python main.py run --config {item['config_file']} "
-                   f"--output {item['output_dir']} --seed {item['seed']}")
+            cmd = (
+                f"python main.py run --config {item['config_file']} "
+                f"--output {item['output_dir']} --seed {item['seed']}"
+            )
             f.write(cmd + "\n")
         os.chmod(run_script, 0o755)
 
@@ -349,25 +369,54 @@ def generate_shell_scripts(work_items: List[Dict[str, Any]], output_dir: str) ->
 # CLI
 # -------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Batch experiment automation for scheduler simulator.",
-        epilog="Example: python batch_run.py --base configs/basic.yaml --sweep policy:bestfit,spread,fgd --runs 5"
+        epilog="Example: python batch_run.py --base configs/basic.yaml --sweep policy:bestfit,spread,fgd --runs 5",
     )
-    parser.add_argument('--base', '-b', required=True,
-                        help='Base YAML configuration file.')
-    parser.add_argument('--sweep', '-s', action='append',
-                        help='Sweep parameter specification, e.g., policy:bestfit,spread,fgd. Can be repeated.')
-    parser.add_argument('--runs', '-r', type=int, default=1,
-                        help='Number of runs per parameter combination (each with different seed).')
-    parser.add_argument('--output', '-o', default='batch_results',
-                        help='Output directory for batch results (default: batch_results).')
-    parser.add_argument('--parallel', '-p', type=int, default=1,
-                        help='Number of parallel processes (default: 1).')
-    parser.add_argument('--generate-scripts', '-g', action='store_true',
-                        help='Generate shell scripts instead of running directly.')
-    parser.add_argument('--seeds', '-S', nargs='+', type=int,
-                        help='List of seeds to use for the runs (will be used cyclically).')
+    parser.add_argument(
+        "--base", "-b", required=True, help="Base YAML configuration file."
+    )
+    parser.add_argument(
+        "--sweep",
+        "-s",
+        action="append",
+        help="Sweep parameter specification, e.g., policy:bestfit,spread,fgd. Can be repeated.",
+    )
+    parser.add_argument(
+        "--runs",
+        "-r",
+        type=int,
+        default=1,
+        help="Number of runs per parameter combination (each with different seed).",
+    )
+    parser.add_argument(
+        "--output",
+        "-o",
+        default="batch_results",
+        help="Output directory for batch results (default: batch_results).",
+    )
+    parser.add_argument(
+        "--parallel",
+        "-p",
+        type=int,
+        default=1,
+        help="Number of parallel processes (default: 1).",
+    )
+    parser.add_argument(
+        "--generate-scripts",
+        "-g",
+        action="store_true",
+        help="Generate shell scripts instead of running directly.",
+    )
+    parser.add_argument(
+        "--seeds",
+        "-S",
+        nargs="+",
+        type=int,
+        help="List of seeds to use for the runs (will be used cyclically).",
+    )
 
     args = parser.parse_args()
 
@@ -379,7 +428,7 @@ def main():
             sweep_params[key] = values
     else:
         # Default: sweep over policies if not specified
-        sweep_params = {'simulation.policy': ['bestfit', 'spread', 'fgd', 'gpupack']}
+        sweep_params = {"simulation.policy": ["bestfit", "spread", "fgd", "gpupack"]}
 
     # Determine seeds
     seeds = args.seeds
@@ -398,5 +447,5 @@ def main():
     )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

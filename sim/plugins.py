@@ -16,23 +16,24 @@ Plugins available:
       using dot product, with optional normalisation.
 """
 
-import math
 import random
-from typing import List, Optional, Dict, Any, Callable
-from .cluster import Cluster
-from .pod import Pod, ResourceRequest
-from .node import Node
+from typing import Any
 
+from .cluster import Cluster
+from .node import Node
+from .pod import Pod, ResourceRequest
 
 # -------------------------------------------------------------------------
 # Base plugin interface
 # -------------------------------------------------------------------------
 
+
 class ScoringPlugin:
     """Base class for all scoring plugins."""
+
     name: str = "base"
 
-    def __init__(self, args: Optional[Dict[str, Any]] = None):
+    def __init__(self, args: dict[str, Any] | None = None):
         self.args = args or {}
 
     def Score(self, pod: Pod, node: Node, cluster: Cluster) -> float:
@@ -49,12 +50,14 @@ class ScoringPlugin:
 # Concrete plugins
 # -------------------------------------------------------------------------
 
+
 class BestFitScore(ScoringPlugin):
     """
     Best‑fit: score is inversely proportional to the remaining capacity
     after placing the pod. The node with the smallest remaining capacity
     (tightest fit) gets the highest score.
     """
+
     name = "BestFitScore"
 
     def Score(self, pod: Pod, node: Node, cluster: Cluster) -> float:
@@ -62,12 +65,16 @@ class BestFitScore(ScoringPlugin):
             return 0.0
 
         remaining_cpu = node.capacity.cpu - node.allocated.cpu - pod.resources.cpu
-        remaining_mem = node.capacity.memory - node.allocated.memory - pod.resources.memory
+        remaining_mem = (
+            node.capacity.memory - node.allocated.memory - pod.resources.memory
+        )
         remaining_gpu = node.capacity.gpu - node.allocated.gpu - pod.resources.gpu
 
         # Normalise by capacity to get fraction, then invert (smaller remaining -> higher score)
         cpu_frac = remaining_cpu / node.capacity.cpu if node.capacity.cpu > 0 else 1.0
-        mem_frac = remaining_mem / node.capacity.memory if node.capacity.memory > 0 else 1.0
+        mem_frac = (
+            remaining_mem / node.capacity.memory if node.capacity.memory > 0 else 1.0
+        )
         gpu_frac = remaining_gpu / node.capacity.gpu if node.capacity.gpu > 0 else 1.0
 
         # Score = 1 / (1 + sum of fractions) – smaller sum => higher score
@@ -80,6 +87,7 @@ class SpreadScore(ScoringPlugin):
     Spread: score is inversely proportional to the number of running pods
     on the node. Nodes with fewer pods get higher scores.
     """
+
     name = "SpreadScore"
 
     def Score(self, pod: Pod, node: Node, cluster: Cluster) -> float:
@@ -97,6 +105,7 @@ class GpuPackingScore(ScoringPlugin):
         - If pod requests GPU:
             score = 1.0 if node has allocated GPUs else 0.0
     """
+
     name = "GpuPackingScore"
 
     def Score(self, pod: Pod, node: Node, cluster: Cluster) -> float:
@@ -115,13 +124,14 @@ class FGDScore(ScoringPlugin):
     on a gang of pods. It returns 1.0 if the node can fit the entire gang,
     else 0.0. It should be used as a filter (weight high or as mandatory).
     """
+
     name = "FGDScore"
 
     def Score(self, pod: Pod, node: Node, cluster: Cluster) -> float:
         # For single‑pod scheduling, fall back to normal feasibility
         return 1.0 if node.can_fit(pod.resources) else 0.0
 
-    def ScoreGang(self, gang_pods: List[Pod], node: Node, cluster: Cluster) -> float:
+    def ScoreGang(self, gang_pods: list[Pod], node: Node, cluster: Cluster) -> float:
         """
         Score for a whole gang. Checks if the node can fit all pods.
         """
@@ -141,12 +151,15 @@ class DotProductScore(ScoringPlugin):
     the pod's resource request vector and the node's free resource vector,
     optionally normalised.
     """
+
     name = "DotProductScore"
 
-    def __init__(self, args: Optional[Dict[str, Any]] = None):
+    def __init__(self, args: dict[str, Any] | None = None):
         super().__init__(args)
-        self.dim_ext_method = self.args.get('dimExtMethod', 'share')  # 'share' or 'full'
-        self.norm_method = self.args.get('normMethod', 'max')         # 'max' or 'none'
+        self.dim_ext_method = self.args.get(
+            "dimExtMethod", "share"
+        )  # 'share' or 'full'
+        self.norm_method = self.args.get("normMethod", "max")  # 'max' or 'none'
 
     def Score(self, pod: Pod, node: Node, cluster: Cluster) -> float:
         if not node.can_fit(pod.resources):
@@ -166,11 +179,13 @@ class DotProductScore(ScoringPlugin):
         dot = req_cpu * free_cpu + req_mem * free_mem + req_gpu * free_gpu
 
         # Normalisation (optional)
-        if self.norm_method == 'max':
+        if self.norm_method == "max":
             # Max possible dot product (pod request * total capacity)
-            max_dot = (req_cpu * node.capacity.cpu +
-                       req_mem * node.capacity.memory +
-                       req_gpu * node.capacity.gpu)
+            max_dot = (
+                req_cpu * node.capacity.cpu
+                + req_mem * node.capacity.memory
+                + req_gpu * node.capacity.gpu
+            )
             if max_dot > 0:
                 dot = dot / max_dot
             else:
@@ -182,9 +197,10 @@ class DotProductScore(ScoringPlugin):
 
 class RandomScore(ScoringPlugin):
     """Random score – used for random scheduling."""
+
     name = "RandomScore"
 
-    def __init__(self, args: Optional[Dict[str, Any]] = None, seed: Optional[int] = None):
+    def __init__(self, args: dict[str, Any] | None = None, seed: int | None = None):
         super().__init__(args)
         self.rng = random.Random(seed) if seed is not None else random.Random()
 
@@ -216,7 +232,9 @@ def get_plugin_class(name: str):
     return cls
 
 
-def instantiate_plugin(name: str, args: Optional[Dict[str, Any]] = None, seed: Optional[int] = None):
+def instantiate_plugin(
+    name: str, args: dict[str, Any] | None = None, seed: int | None = None
+):
     """Create an instance of a plugin with given arguments."""
     cls = get_plugin_class(name)
     if name == "RandomScore" and seed is not None:

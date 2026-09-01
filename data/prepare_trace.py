@@ -38,21 +38,20 @@ pods.csv:
     5.0,pod-3,2.0,4.0,0,gang-A
 """
 
-import sys
-import os
-import csv
-import yaml
 import argparse
+import csv
+import sys
 from pathlib import Path
-from typing import List, Dict, Any, Optional
-from collections import defaultdict
+from typing import Any
 
+import yaml
 
 # -------------------------------------------------------------------------
 # CSV Parsers
 # -------------------------------------------------------------------------
 
-def parse_node_csv(csv_file: str) -> List[Dict[str, Any]]:
+
+def parse_node_csv(csv_file: str) -> list[dict[str, Any]]:
     """
     Parse a CSV file containing node specifications.
 
@@ -63,22 +62,22 @@ def parse_node_csv(csv_file: str) -> List[Dict[str, Any]]:
         List of node dictionaries.
     """
     nodes = []
-    with open(csv_file, 'r') as f:
+    with open(csv_file, "r") as f:
         reader = csv.DictReader(f)
         for row in reader:
             node = {
-                'name': row.get('node_name', row.get('name')),
-                'capacity': {
-                    'cpu': float(row.get('cpu_capacity', row.get('cpu', 0.0))),
-                    'memory': float(row.get('memory_capacity', row.get('memory', 0.0))),
-                    'gpu': int(row.get('gpu_capacity', row.get('gpu', 0))),
-                }
+                "name": row.get("node_name", row.get("name")),
+                "capacity": {
+                    "cpu": float(row.get("cpu_capacity", row.get("cpu", 0.0))),
+                    "memory": float(row.get("memory_capacity", row.get("memory", 0.0))),
+                    "gpu": int(row.get("gpu_capacity", row.get("gpu", 0))),
+                },
             }
             nodes.append(node)
     return nodes
 
 
-def parse_pod_csv(csv_file: str) -> List[Dict[str, Any]]:
+def parse_pod_csv(csv_file: str) -> list[dict[str, Any]]:
     """
     Parse a CSV file containing pod specifications.
 
@@ -89,25 +88,27 @@ def parse_pod_csv(csv_file: str) -> List[Dict[str, Any]]:
         List of pod dictionaries.
     """
     pods = []
-    with open(csv_file, 'r') as f:
+    with open(csv_file, "r") as f:
         reader = csv.DictReader(f)
         for row in reader:
             pod = {
-                'time': float(row.get('submit_time', row.get('time', 0.0))),
-                'pod': {
-                    'uid': row.get('pod_uid', row.get('uid', 'pod-unknown')),
-                    'name': row.get('pod_uid', row.get('uid', 'pod-unknown')),
-                    'resources': {
-                        'cpu': float(row.get('cpu_request', row.get('cpu', 0.0))),
-                        'memory': float(row.get('memory_request', row.get('memory', 0.0))),
-                        'gpu': int(row.get('gpu_request', row.get('gpu', 0))),
-                    }
-                }
+                "time": float(row.get("submit_time", row.get("time", 0.0))),
+                "pod": {
+                    "uid": row.get("pod_uid", row.get("uid", "pod-unknown")),
+                    "name": row.get("pod_uid", row.get("uid", "pod-unknown")),
+                    "resources": {
+                        "cpu": float(row.get("cpu_request", row.get("cpu", 0.0))),
+                        "memory": float(
+                            row.get("memory_request", row.get("memory", 0.0))
+                        ),
+                        "gpu": int(row.get("gpu_request", row.get("gpu", 0))),
+                    },
+                },
             }
             # Optional gang_id
-            gang_id = row.get('gang_id', None)
+            gang_id = row.get("gang_id", None)
             if gang_id and gang_id.strip():
-                pod['pod']['gang_id'] = gang_id.strip()
+                pod["pod"]["gang_id"] = gang_id.strip()
             pods.append(pod)
     return pods
 
@@ -116,13 +117,16 @@ def parse_pod_csv(csv_file: str) -> List[Dict[str, Any]]:
 # YAML Generators
 # -------------------------------------------------------------------------
 
-def generate_unified_experiment_yaml(nodes: List[Dict[str, Any]],
-                                     pods: List[Dict[str, Any]],
-                                     policy: str = 'bestfit',
-                                     until: float = 10000.0,
-                                     seed: int = 42,
-                                     runtime: str = 'default',
-                                     log_interval: Optional[float] = None) -> Dict[str, Any]:
+
+def generate_unified_experiment_yaml(
+    nodes: list[dict[str, Any]],
+    pods: list[dict[str, Any]],
+    policy: str = "bestfit",
+    until: float = 10000.0,
+    seed: int = 42,
+    runtime: str = "default",
+    log_interval: float | None = None,
+) -> dict[str, Any]:
     """
     Build a unified experiment configuration dictionary.
 
@@ -130,22 +134,9 @@ def generate_unified_experiment_yaml(nodes: List[Dict[str, Any]],
         Dictionary suitable for YAML output.
     """
     # Cluster section
-    cluster_cfg = {'nodes': nodes}
+    cluster_cfg = {"nodes": nodes}
 
     # Workload section (trace type)
-    workload_cfg = {
-        'type': 'trace',
-        'file': 'pods.csv'  # This is just a placeholder; the actual trace is embedded in the YAML
-        # But for a full self-contained YAML, we could embed the pods directly.
-        # However, we will generate separate workload YAML for trace type that references the CSV.
-        # For simplicity in this pipeline, we generate a trace-based workload that points to the CSV.
-        # But since we have the data, we can either:
-        #   a) embed the events as a list in YAML (large)
-        #   b) generate separate workload YAML with file reference.
-        # We'll choose option b: we'll output separate files if needed.
-        # For unified, we can just output a workload section with type trace and file path.
-        # The user must ensure the file path is correct.
-    }
 
     # However, the unified YAML expects a workload section. We'll generate one that references
     # the CSV file. The path will be relative to the YAML location? We'll let the user specify.
@@ -166,54 +157,57 @@ def generate_unified_experiment_yaml(nodes: List[Dict[str, Any]],
     # So we'll support both: if --output is a file, we generate a unified YAML with
     # workload.file pointing to the CSV. We'll also generate a separate scheduler section.
     return {
-        'cluster': cluster_cfg,
-        'workload': {
-            'type': 'trace',
-            'file': 'pods.csv'  # This will be overridden by the actual path
+        "cluster": cluster_cfg,
+        "workload": {
+            "type": "trace",
+            "file": "pods.csv",  # This will be overridden by the actual path
         },
-        'simulation': {
-            'policy': policy,
-            'until': until,
-            'seed': seed,
-            'log_interval': log_interval,
-            'runtime_function': runtime,
-        }
+        "simulation": {
+            "policy": policy,
+            "until": until,
+            "seed": seed,
+            "log_interval": log_interval,
+            "runtime_function": runtime,
+        },
     }
 
 
-def generate_cluster_yaml(nodes: List[Dict[str, Any]]) -> Dict[str, Any]:
+def generate_cluster_yaml(nodes: list[dict[str, Any]]) -> dict[str, Any]:
     """Generate a cluster YAML dictionary."""
-    return {'nodes': nodes}
+    return {"nodes": nodes}
 
 
-def generate_scheduler_yaml(policy: str = 'bestfit',
-                            until: float = 10000.0,
-                            seed: int = 42,
-                            log_interval: Optional[float] = None,
-                            runtime: str = 'default') -> Dict[str, Any]:
+def generate_scheduler_yaml(
+    policy: str = "bestfit",
+    until: float = 10000.0,
+    seed: int = 42,
+    log_interval: float | None = None,
+    runtime: str = "default",
+) -> dict[str, Any]:
     """Generate a scheduler YAML dictionary."""
     cfg = {
-        'policy': policy,
-        'until': until,
-        'seed': seed,
-        'runtime_function': runtime,
+        "policy": policy,
+        "until": until,
+        "seed": seed,
+        "runtime_function": runtime,
     }
     if log_interval is not None:
-        cfg['log_interval'] = log_interval
+        cfg["log_interval"] = log_interval
     return cfg
 
 
-def generate_workload_yaml_from_csv(csv_file: str) -> Dict[str, Any]:
+def generate_workload_yaml_from_csv(csv_file: str) -> dict[str, Any]:
     """Generate a workload YAML that references a CSV trace file."""
     return {
-        'type': 'trace',
-        'file': csv_file,
+        "type": "trace",
+        "file": csv_file,
     }
 
 
 # -------------------------------------------------------------------------
 # Main Pipeline
 # -------------------------------------------------------------------------
+
 
 def run_pipeline(args):
     """
@@ -232,8 +226,8 @@ def run_pipeline(args):
 
         # Cluster YAML
         cluster_cfg = generate_cluster_yaml(nodes)
-        cluster_file = out_dir / 'cluster.yaml'
-        with open(cluster_file, 'w') as f:
+        cluster_file = out_dir / "cluster.yaml"
+        with open(cluster_file, "w") as f:
             yaml.dump(cluster_cfg, f, default_flow_style=False, sort_keys=False)
         print(f"Cluster config written to: {cluster_file}")
 
@@ -243,10 +237,10 @@ def run_pipeline(args):
             until=args.until,
             seed=args.seed,
             log_interval=args.log_interval,
-            runtime=args.runtime
+            runtime=args.runtime,
         )
-        scheduler_file = out_dir / 'scheduler.yaml'
-        with open(scheduler_file, 'w') as f:
+        scheduler_file = out_dir / "scheduler.yaml"
+        with open(scheduler_file, "w") as f:
             yaml.dump(scheduler_cfg, f, default_flow_style=False, sort_keys=False)
         print(f"Scheduler config written to: {scheduler_file}")
 
@@ -254,13 +248,15 @@ def run_pipeline(args):
         # We copy or link the pods CSV to the output dir for portability
         # We'll just reference the original path
         workload_cfg = generate_workload_yaml_from_csv(args.pods)
-        workload_file = out_dir / 'workload.yaml'
-        with open(workload_file, 'w') as f:
+        workload_file = out_dir / "workload.yaml"
+        with open(workload_file, "w") as f:
             yaml.dump(workload_cfg, f, default_flow_style=False, sort_keys=False)
         print(f"Workload config written to: {workload_file}")
 
-        print(f"\nNow you can run: python main.py apply --cluster {cluster_file} "
-              f"--scheduler {scheduler_file} --workload {workload_file} --output results/")
+        print(
+            f"\nNow you can run: python main.py apply --cluster {cluster_file} "
+            f"--scheduler {scheduler_file} --workload {workload_file} --output results/"
+        )
 
     elif args.output:
         # Generate a unified experiment YAML for `main.py run`
@@ -268,35 +264,37 @@ def run_pipeline(args):
         # The workload section should have 'file' pointing to the CSV.
         # We'll use the original CSV path.
         unified_cfg = {
-            'cluster': generate_cluster_yaml(nodes)['nodes'],
-            'workload': generate_workload_yaml_from_csv(args.pods),
-            'simulation': generate_scheduler_yaml(
+            "cluster": generate_cluster_yaml(nodes)["nodes"],
+            "workload": generate_workload_yaml_from_csv(args.pods),
+            "simulation": generate_scheduler_yaml(
                 policy=args.policy,
                 until=args.until,
                 seed=args.seed,
                 log_interval=args.log_interval,
-                runtime=args.runtime
-            )
+                runtime=args.runtime,
+            ),
         }
         # But we need to ensure the structure is correct: cluster.nodes, workload, simulation.
         # We'll reconstruct properly.
         unified_cfg = {
-            'cluster': {'nodes': nodes},
-            'workload': {'type': 'trace', 'file': args.pods},
-            'simulation': generate_scheduler_yaml(
+            "cluster": {"nodes": nodes},
+            "workload": {"type": "trace", "file": args.pods},
+            "simulation": generate_scheduler_yaml(
                 policy=args.policy,
                 until=args.until,
                 seed=args.seed,
                 log_interval=args.log_interval,
-                runtime=args.runtime
-            )
+                runtime=args.runtime,
+            ),
         }
         output_file = Path(args.output)
         output_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_file, 'w') as f:
+        with open(output_file, "w") as f:
             yaml.dump(unified_cfg, f, default_flow_style=False, sort_keys=False)
         print(f"Unified experiment config written to: {output_file}")
-        print(f"\nNow you can run: python main.py run --config {output_file} --output results/")
+        print(
+            f"\nNow you can run: python main.py run --config {output_file} --output results/"
+        )
 
     else:
         print("Error: either --output or --output-dir must be specified.")
@@ -307,34 +305,58 @@ def run_pipeline(args):
 # CLI
 # -------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Prepare YAML configs from raw CSV traces.",
-        epilog="Example: python prepare_trace.py --nodes nodes.csv --pods pods.csv --output-dir configs/"
+        epilog="Example: python prepare_trace.py --nodes nodes.csv --pods pods.csv --output-dir configs/",
     )
-    parser.add_argument('--nodes', required=True,
-                        help='CSV file with node specifications.')
-    parser.add_argument('--pods', required=True,
-                        help='CSV file with pod specifications (trace).')
-    parser.add_argument('--output-dir', '-d',
-                        help='Directory to write separate cluster, scheduler, workload YAMLs.')
-    parser.add_argument('--output', '-o',
-                        help='Single unified YAML file for `main.py run`.')
-    parser.add_argument('--policy', '-p', default='bestfit',
-                        help='Scheduling policy (default: bestfit).')
-    parser.add_argument('--until', type=float, default=10000.0,
-                        help='Simulation horizon (default: 10000).')
-    parser.add_argument('--seed', type=int, default=42,
-                        help='Random seed (default: 42).')
-    parser.add_argument('--log-interval', type=float, default=None,
-                        help='Progress logging interval (optional).')
-    parser.add_argument('--runtime', '-r', default='default',
-                        choices=['default', 'resource_based'],
-                        help='Runtime function (default: default).')
+    parser.add_argument(
+        "--nodes", required=True, help="CSV file with node specifications."
+    )
+    parser.add_argument(
+        "--pods", required=True, help="CSV file with pod specifications (trace)."
+    )
+    parser.add_argument(
+        "--output-dir",
+        "-d",
+        help="Directory to write separate cluster, scheduler, workload YAMLs.",
+    )
+    parser.add_argument(
+        "--output", "-o", help="Single unified YAML file for `main.py run`."
+    )
+    parser.add_argument(
+        "--policy",
+        "-p",
+        default="bestfit",
+        help="Scheduling policy (default: bestfit).",
+    )
+    parser.add_argument(
+        "--until",
+        type=float,
+        default=10000.0,
+        help="Simulation horizon (default: 10000).",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Random seed (default: 42)."
+    )
+    parser.add_argument(
+        "--log-interval",
+        type=float,
+        default=None,
+        help="Progress logging interval (optional).",
+    )
+    parser.add_argument(
+        "--runtime",
+        "-r",
+        default="default",
+        choices=["default", "resource_based"],
+        help="Runtime function (default: default).",
+    )
 
     args = parser.parse_args()
     run_pipeline(args)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

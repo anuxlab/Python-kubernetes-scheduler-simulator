@@ -27,24 +27,27 @@ Example YAML:
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any
-import yaml
+from typing import Any
 
+import yaml
 
 # -------------------------------------------------------------------------
 # Data models for the configuration
 # -------------------------------------------------------------------------
 
+
 @dataclass
 class PluginArgs:
     """Arguments for a specific plugin."""
+
     # Generic dict for arbitrary key-value pairs
-    data: Dict[str, Any] = field(default_factory=dict)
+    data: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class Plugin:
     """A single plugin entry (name and weight)."""
+
     name: str
     weight: int = 1
 
@@ -52,14 +55,16 @@ class Plugin:
 @dataclass
 class PluginConfig:
     """Plugin configuration with optional arguments."""
+
     name: str
-    args: Optional[Dict[str, Any]] = None
+    args: dict[str, Any] | None = None
 
 
 @dataclass
 class Plugins:
     """Container for score plugins."""
-    score: Optional[List[Plugin]] = None
+
+    score: list[Plugin] | None = None
 
 
 @dataclass
@@ -75,35 +80,36 @@ class KubeSchedulerConfiguration:
             enabled: [...]
         pluginConfig: [...]
     """
+
     apiVersion: str = "simon/v1alpha1"
     kind: str = "KubeSchedulerConfiguration"
-    plugins: Optional[Plugins] = None
-    pluginConfig: Optional[List[PluginConfig]] = None
+    plugins: Plugins | None = None
+    pluginConfig: list[PluginConfig] | None = None
 
     @classmethod
     def from_yaml(cls, filepath: str) -> "KubeSchedulerConfiguration":
         """Load and parse a YAML file."""
-        with open(filepath, 'r') as f:
+        with open(filepath, "r") as f:
             data = yaml.safe_load(f)
         return cls.from_dict(data)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "KubeSchedulerConfiguration":
+    def from_dict(cls, data: dict[str, Any]) -> "KubeSchedulerConfiguration":
         """Parse a dictionary into a configuration object."""
-        api_version = data.get('apiVersion', 'simon/v1alpha1')
-        kind = data.get('kind', 'KubeSchedulerConfiguration')
-        plugins_data = data.get('plugins', {})
-        plugin_config_data = data.get('pluginConfig', [])
+        api_version = data.get("apiVersion", "simon/v1alpha1")
+        kind = data.get("kind", "KubeSchedulerConfiguration")
+        plugins_data = data.get("plugins", {})
+        plugin_config_data = data.get("pluginConfig", [])
 
         plugins = None
         if plugins_data:
             score_plugins = []
-            score_data = plugins_data.get('score', {})
-            enabled = score_data.get('enabled', [])
+            score_data = plugins_data.get("score", {})
+            enabled = score_data.get("enabled", [])
             for p in enabled:
                 if isinstance(p, dict):
-                    name = p.get('name')
-                    weight = p.get('weight', 1)
+                    name = p.get("name")
+                    weight = p.get("weight", 1)
                     score_plugins.append(Plugin(name=name, weight=weight))
                 else:
                     score_plugins.append(Plugin(name=p, weight=1))
@@ -111,8 +117,8 @@ class KubeSchedulerConfiguration:
 
         plugin_config = []
         for pc in plugin_config_data:
-            name = pc.get('name')
-            args = pc.get('args')
+            name = pc.get("name")
+            args = pc.get("args")
             plugin_config.append(PluginConfig(name=name, args=args))
 
         return cls(
@@ -122,7 +128,7 @@ class KubeSchedulerConfiguration:
             pluginConfig=plugin_config,
         )
 
-    def get_plugin_args(self, plugin_name: str) -> Dict[str, Any]:
+    def get_plugin_args(self, plugin_name: str) -> dict[str, Any]:
         """Retrieve the args for a given plugin name, or empty dict."""
         if self.pluginConfig:
             for pc in self.pluginConfig:
@@ -130,7 +136,7 @@ class KubeSchedulerConfiguration:
                     return pc.args or {}
         return {}
 
-    def get_plugins_with_weights(self) -> List[Plugin]:
+    def get_plugins_with_weights(self) -> list[Plugin]:
         """Return the list of score plugins with weights."""
         if self.plugins and self.plugins.score:
             return self.plugins.score

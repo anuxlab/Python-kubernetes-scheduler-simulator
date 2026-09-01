@@ -25,30 +25,26 @@ Usage:
     python plot_results.py --input batch_results/ --table summary_table.csv --latex table.tex
 """
 
-import sys
-import os
-import json
-import csv
 import argparse
-import re
+import json
+import sys
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple, Union
-from collections import defaultdict
-import math
 
 # Optional imports – we check for availability
 try:
-    import matplotlib.pyplot as plt
     import matplotlib
-    matplotlib.use('Agg')  # Non-interactive backend
+    import matplotlib.pyplot as plt
+
+    matplotlib.use("Agg")  # Non-interactive backend
     import numpy as np
-    from matplotlib.ticker import MaxNLocator
+
     HAS_PLOT = True
 except ImportError:
     HAS_PLOT = False
 
 try:
     import pandas as pd
+
     HAS_PANDAS = True
 except ImportError:
     HAS_PANDAS = False
@@ -57,6 +53,7 @@ except ImportError:
 # -------------------------------------------------------------------------
 # Data Loading
 # -------------------------------------------------------------------------
+
 
 def load_summary_from_directory(directory: str) -> pd.DataFrame:
     """
@@ -69,52 +66,58 @@ def load_summary_from_directory(directory: str) -> pd.DataFrame:
     Returns a pandas DataFrame.
     """
     if not HAS_PANDAS:
-        raise ImportError("pandas is required for data loading. Install with: pip install pandas")
+        raise ImportError(
+            "pandas is required for data loading. Install with: pip install pandas"
+        )
 
     dir_path = Path(directory)
 
     # First, try to load summary.csv if present
-    summary_csv = dir_path / 'summary.csv'
+    summary_csv = dir_path / "summary.csv"
     if summary_csv.exists():
         df = pd.read_csv(summary_csv)
         return df
 
     # Otherwise, scan for run directories
-    results_dir = dir_path / 'results'
+    results_dir = dir_path / "results"
     if not results_dir.exists():
         results_dir = dir_path  # fallback
 
     data = []
     # Find all subdirectories that look like run_*
-    run_dirs = [d for d in results_dir.glob('run_*') if d.is_dir()]
+    run_dirs = [d for d in results_dir.glob("run_*") if d.is_dir()]
     if not run_dirs:
         # Try also to find any directories with stats.json
-        run_dirs = [d for d in results_dir.glob('*') if d.is_dir() and (d / 'bestfit_stats.json').exists()]
+        run_dirs = [
+            d
+            for d in results_dir.glob("*")
+            if d.is_dir() and (d / "bestfit_stats.json").exists()
+        ]
 
     for run_dir in run_dirs:
-        json_files = list(run_dir.glob('*.json'))
+        json_files = list(run_dir.glob("*.json"))
         if not json_files:
             continue
         # Use the first json (usually bestfit_stats.json)
-        with open(json_files[0], 'r') as f:
+        with open(json_files[0], "r") as f:
             stats = json.load(f)
         # Extract policy from directory name or from config? We'll try to parse run_dir name
         # run_dir name pattern: run_{param1}_{param2}_seed{seed}
         # We can extract policy from the name or from stats if available.
         # Let's attempt to parse policy from directory name: e.g., "run_simulation.policy_bestfit_seed42"
-        policy = 'unknown'
-        param_parts = run_dir.name.split('_')
+        policy = "unknown"
+        param_parts = run_dir.name.split("_")
         for part in param_parts:
-            if 'policy' in part:
+            if "policy" in part:
                 # e.g., "policy_bestfit" or "simulation.policy_bestfit"
-                if '_' in part:
-                    policy = part.split('_')[-1]
+                if "_" in part:
+                    policy = part.split("_")[-1]
                 else:
                     policy = part
                 break
         # If not found, try to get from stats? stats doesn't have policy.
         # We'll add policy as a column
-        row = {'policy': policy}
+        row = {"policy": policy}
         # Add all numeric stats from stats
         for key, value in stats.items():
             if isinstance(value, (int, float)):
@@ -139,7 +142,10 @@ def load_summary_from_csv(csv_file: str) -> pd.DataFrame:
 # Plotting Functions
 # -------------------------------------------------------------------------
 
-def plot_wait_time_cdf(df: pd.DataFrame, output_dir: str, by_policy: bool = True) -> None:
+
+def plot_wait_time_cdf(
+    df: pd.DataFrame, output_dir: str, by_policy: bool = True
+) -> None:
     """
     Plot CDF of wait times. If by_policy=True, plot separate lines per policy.
     Otherwise, plot a single CDF for all runs.
@@ -158,50 +164,55 @@ def plot_wait_time_cdf(df: pd.DataFrame, output_dir: str, by_policy: bool = True
     # We can modify load_summary_from_directory to also load wait_times lists.
     # But for now, if wait_times is not in the DataFrame, we cannot plot CDF.
     # We'll add a fallback: if we have only aggregate stats, we skip CDF.
-    if 'wait_times' not in df.columns:
-        print("No wait_times column found; cannot plot CDF. (Run with individual stats.json enabled?)")
+    if "wait_times" not in df.columns:
+        print(
+            "No wait_times column found; cannot plot CDF. (Run with individual stats.json enabled?)"
+        )
         return
 
     # If wait_times is a string representation of a list, parse it
     # This is messy; we should have loaded actual lists.
     # We'll assume the DataFrame has a column 'wait_times' that is a list.
     # We'll convert if needed.
-    if isinstance(df['wait_times'].iloc[0], str):
+    if isinstance(df["wait_times"].iloc[0], str):
         # parse
         def parse_list(s):
-            if pd.isna(s) or s == '':
+            if pd.isna(s) or s == "":
                 return []
-            return [float(x) for x in s.strip('[]').split(',') if x]
-        df['wait_times'] = df['wait_times'].apply(parse_list)
+            return [float(x) for x in s.strip("[]").split(",") if x]
+
+        df["wait_times"] = df["wait_times"].apply(parse_list)
 
     # Now plot
     plt.figure(figsize=(10, 6))
-    if by_policy and 'policy' in df.columns:
-        for policy, group in df.groupby('policy'):
-            all_wait = [w for sublist in group['wait_times'] for w in sublist]
+    if by_policy and "policy" in df.columns:
+        for policy, group in df.groupby("policy"):
+            all_wait = [w for sublist in group["wait_times"] for w in sublist]
             if all_wait:
                 sorted_wait = np.sort(all_wait)
-                cdf = np.arange(1, len(sorted_wait)+1) / len(sorted_wait)
+                cdf = np.arange(1, len(sorted_wait) + 1) / len(sorted_wait)
                 plt.plot(sorted_wait, cdf, label=policy, linewidth=2)
     else:
-        all_wait = [w for sublist in df['wait_times'] for w in sublist]
+        all_wait = [w for sublist in df["wait_times"] for w in sublist]
         if all_wait:
             sorted_wait = np.sort(all_wait)
-            cdf = np.arange(1, len(sorted_wait)+1) / len(sorted_wait)
-            plt.plot(sorted_wait, cdf, label='All runs', linewidth=2)
+            cdf = np.arange(1, len(sorted_wait) + 1) / len(sorted_wait)
+            plt.plot(sorted_wait, cdf, label="All runs", linewidth=2)
 
-    plt.xlabel('Wait Time')
-    plt.ylabel('CDF')
-    plt.title('CDF of Pod Wait Times')
+    plt.xlabel("Wait Time")
+    plt.ylabel("CDF")
+    plt.title("CDF of Pod Wait Times")
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(Path(output_dir) / 'wait_time_cdf.png', dpi=300)
+    plt.savefig(Path(output_dir) / "wait_time_cdf.png", dpi=300)
     plt.close()
     print(f"CDF plot saved to {output_dir}/wait_time_cdf.png")
 
 
-def plot_avg_metrics_bar(df: pd.DataFrame, output_dir: str, metrics: List[str] = None) -> None:
+def plot_avg_metrics_bar(
+    df: pd.DataFrame, output_dir: str, metrics: list[str] | None = None
+) -> None:
     """
     Plot bar charts comparing average metrics across policies.
     Default metrics: avg_wait_time, avg_turnaround_time, avg_run_time.
@@ -211,7 +222,7 @@ def plot_avg_metrics_bar(df: pd.DataFrame, output_dir: str, metrics: List[str] =
         return
 
     if metrics is None:
-        metrics = ['avg_wait_time', 'avg_turnaround_time', 'avg_run_time']
+        metrics = ["avg_wait_time", "avg_turnaround_time", "avg_run_time"]
     # Check which metrics exist
     available = [m for m in metrics if m in df.columns]
     if not available:
@@ -219,25 +230,25 @@ def plot_avg_metrics_bar(df: pd.DataFrame, output_dir: str, metrics: List[str] =
         return
 
     # Group by policy and compute mean across runs
-    if 'policy' in df.columns:
-        grouped = df.groupby('policy')[available].mean()
+    if "policy" in df.columns:
+        grouped = df.groupby("policy")[available].mean()
     else:
         # If no policy column, treat all as one group
         grouped = df[available].mean().to_frame().T
-        grouped.index = ['All']
+        grouped.index = ["All"]
 
     # Plot
-    fig, axes = plt.subplots(1, len(available), figsize=(6*len(available), 5))
+    _fig, axes = plt.subplots(1, len(available), figsize=(6 * len(available), 5))
     if len(available) == 1:
         axes = [axes]
     for ax, metric in zip(axes, available):
-        grouped[metric].plot(kind='bar', ax=ax, color='skyblue', edgecolor='black')
-        ax.set_title(metric.replace('_', ' ').title())
-        ax.set_ylabel(metric.replace('_', ' '))
+        grouped[metric].plot(kind="bar", ax=ax, color="skyblue", edgecolor="black")
+        ax.set_title(metric.replace("_", " ").title())
+        ax.set_ylabel(metric.replace("_", " "))
         ax.grid(True, alpha=0.3)
-        ax.tick_params(axis='x', rotation=45)
+        ax.tick_params(axis="x", rotation=45)
     plt.tight_layout()
-    plt.savefig(Path(output_dir) / 'avg_metrics_bar.png', dpi=300)
+    plt.savefig(Path(output_dir) / "avg_metrics_bar.png", dpi=300)
     plt.close()
     print(f"Bar chart saved to {output_dir}/avg_metrics_bar.png")
 
@@ -253,7 +264,7 @@ def plot_utilization(df: pd.DataFrame, output_dir: str) -> None:
     # Check if we have utilization columns
     # The stats.json contains 'final_utilization' as a dict.
     # In flat CSV, we might have columns like 'final_utilization.cpu'
-    util_cols = [col for col in df.columns if 'final_utilization' in col]
+    util_cols = [col for col in df.columns if "final_utilization" in col]
     if not util_cols:
         print("No utilization data found.")
         return
@@ -263,22 +274,27 @@ def plot_utilization(df: pd.DataFrame, output_dir: str) -> None:
     # But we'll just try to use what's in the DataFrame.
     # We'll look for columns: final_utilization_cpu, final_utilization_memory, final_utilization_gpu.
     # Or maybe we have a column 'final_utilization' that is a dict.
-    if 'final_utilization' in df.columns:
+    if "final_utilization" in df.columns:
         # Extract CPU, memory, GPU
         def extract_util(util_dict):
             if isinstance(util_dict, dict):
-                return util_dict.get('cpu', 0), util_dict.get('memory', 0), util_dict.get('gpu', 0)
+                return (
+                    util_dict.get("cpu", 0),
+                    util_dict.get("memory", 0),
+                    util_dict.get("gpu", 0),
+                )
             return 0, 0, 0
-        df[['util_cpu', 'util_mem', 'util_gpu']] = df['final_utilization'].apply(
+
+        df[["util_cpu", "util_mem", "util_gpu"]] = df["final_utilization"].apply(
             lambda x: pd.Series(extract_util(x))
         )
-        util_cols = ['util_cpu', 'util_mem', 'util_gpu']
+        util_cols = ["util_cpu", "util_mem", "util_gpu"]
     else:
         # Try to find columns with 'cpu', 'memory', 'gpu' in their names
         # e.g., 'final_utilization_cpu'
         util_cols = []
         for col in df.columns:
-            if any(key in col for key in ['cpu', 'memory', 'gpu']):
+            if any(key in col for key in ["cpu", "memory", "gpu"]):
                 util_cols.append(col)
 
     if not util_cols:
@@ -286,35 +302,35 @@ def plot_utilization(df: pd.DataFrame, output_dir: str) -> None:
         return
 
     # Group by policy and average
-    if 'policy' in df.columns:
-        grouped = df.groupby('policy')[util_cols].mean()
+    if "policy" in df.columns:
+        grouped = df.groupby("policy")[util_cols].mean()
     else:
         grouped = df[util_cols].mean().to_frame().T
-        grouped.index = ['All']
+        grouped.index = ["All"]
 
     # Rename columns for plot
     rename_map = {}
     for col in util_cols:
-        if 'cpu' in col:
-            rename_map[col] = 'CPU'
-        elif 'memory' in col or 'mem' in col:
-            rename_map[col] = 'Memory'
-        elif 'gpu' in col:
-            rename_map[col] = 'GPU'
+        if "cpu" in col:
+            rename_map[col] = "CPU"
+        elif "memory" in col or "mem" in col:
+            rename_map[col] = "Memory"
+        elif "gpu" in col:
+            rename_map[col] = "GPU"
         else:
             rename_map[col] = col
     grouped = grouped.rename(columns=rename_map)
 
     # Plot grouped bar chart
-    grouped.plot(kind='bar', figsize=(8, 6), width=0.8, edgecolor='black')
-    plt.title('Average Cluster Utilization by Resource Type')
-    plt.ylabel('Utilization Fraction')
-    plt.xlabel('Policy')
+    grouped.plot(kind="bar", figsize=(8, 6), width=0.8, edgecolor="black")
+    plt.title("Average Cluster Utilization by Resource Type")
+    plt.ylabel("Utilization Fraction")
+    plt.xlabel("Policy")
     plt.ylim(0, 1)
-    plt.grid(True, alpha=0.3, axis='y')
-    plt.legend(title='Resource')
+    plt.grid(True, alpha=0.3, axis="y")
+    plt.legend(title="Resource")
     plt.tight_layout()
-    plt.savefig(Path(output_dir) / 'utilization_bar.png', dpi=300)
+    plt.savefig(Path(output_dir) / "utilization_bar.png", dpi=300)
     plt.close()
     print(f"Utilization plot saved to {output_dir}/utilization_bar.png")
 
@@ -325,45 +341,47 @@ def plot_wait_time_box(df: pd.DataFrame, output_dir: str) -> None:
     """
     if not HAS_PLOT:
         return
-    if 'wait_times' not in df.columns:
+    if "wait_times" not in df.columns:
         print("No wait_times column; cannot plot box plot.")
         return
 
     # Parse wait_times if needed (similar to CDF)
-    if isinstance(df['wait_times'].iloc[0], str):
+    if isinstance(df["wait_times"].iloc[0], str):
+
         def parse_list(s):
-            if pd.isna(s) or s == '':
+            if pd.isna(s) or s == "":
                 return []
-            return [float(x) for x in s.strip('[]').split(',') if x]
-        df['wait_times'] = df['wait_times'].apply(parse_list)
+            return [float(x) for x in s.strip("[]").split(",") if x]
+
+        df["wait_times"] = df["wait_times"].apply(parse_list)
 
     # Prepare data for boxplot: one list per policy
     data_to_plot = []
     labels = []
-    if 'policy' in df.columns:
-        for policy, group in df.groupby('policy'):
-            all_wait = [w for sublist in group['wait_times'] for w in sublist]
+    if "policy" in df.columns:
+        for policy, group in df.groupby("policy"):
+            all_wait = [w for sublist in group["wait_times"] for w in sublist]
             if all_wait:
                 data_to_plot.append(all_wait)
                 labels.append(policy)
     else:
-        all_wait = [w for sublist in df['wait_times'] for w in sublist]
+        all_wait = [w for sublist in df["wait_times"] for w in sublist]
         if all_wait:
             data_to_plot.append(all_wait)
-            labels.append('All')
+            labels.append("All")
 
     if not data_to_plot:
         print("No wait time data available.")
         return
 
     plt.figure(figsize=(8, 6))
-    bp = plt.boxplot(data_to_plot, labels=labels, patch_artist=True)
-    plt.title('Distribution of Pod Wait Times')
-    plt.ylabel('Wait Time')
-    plt.xlabel('Policy')
-    plt.grid(True, alpha=0.3, axis='y')
+    plt.boxplot(data_to_plot, labels=labels, patch_artist=True)
+    plt.title("Distribution of Pod Wait Times")
+    plt.ylabel("Wait Time")
+    plt.xlabel("Policy")
+    plt.grid(True, alpha=0.3, axis="y")
     plt.tight_layout()
-    plt.savefig(Path(output_dir) / 'wait_time_box.png', dpi=300)
+    plt.savefig(Path(output_dir) / "wait_time_box.png", dpi=300)
     plt.close()
     print(f"Box plot saved to {output_dir}/wait_time_box.png")
 
@@ -372,28 +390,38 @@ def plot_wait_time_box(df: pd.DataFrame, output_dir: str) -> None:
 # Summary Table Generation
 # -------------------------------------------------------------------------
 
-def generate_summary_table(df: pd.DataFrame, output_csv: str = None, output_latex: str = None) -> pd.DataFrame:
+
+def generate_summary_table(
+    df: pd.DataFrame, output_csv: str | None = None, output_latex: str | None = None
+) -> pd.DataFrame:
     """
     Generate a summary table of key metrics per policy.
     Returns a DataFrame and optionally saves as CSV and LaTeX.
     """
     # Select key metrics
-    metrics = ['total_pods_completed', 'avg_wait_time', 'avg_turnaround_time', 'avg_run_time']
+    metrics = [
+        "total_pods_completed",
+        "avg_wait_time",
+        "avg_turnaround_time",
+        "avg_run_time",
+    ]
     # Also include percentiles if available
-    pct_metrics = [col for col in df.columns if 'p' in col and 'wait' in col]  # e.g., p50_wait_time
+    pct_metrics = [
+        col for col in df.columns if "p" in col and "wait" in col
+    ]  # e.g., p50_wait_time
     metrics.extend(pct_metrics)
 
     # Keep only metrics that exist
     available = [m for m in metrics if m in df.columns]
 
-    if 'policy' in df.columns:
-        summary = df.groupby('policy')[available].agg(['mean', 'std']).round(3)
+    if "policy" in df.columns:
+        summary = df.groupby("policy")[available].agg(["mean", "std"]).round(3)
         # Flatten columns: policy_metric_mean, policy_metric_std
-        summary.columns = ['_'.join(col).strip() for col in summary.columns.values]
+        summary.columns = ["_".join(col).strip() for col in summary.columns.values]
     else:
-        summary = df[available].agg(['mean', 'std']).round(3).T
-        summary.columns = ['mean', 'std']
-        summary.index.name = 'metric'
+        summary = df[available].agg(["mean", "std"]).round(3).T
+        summary.columns = ["mean", "std"]
+        summary.index.name = "metric"
 
     if output_csv:
         summary.to_csv(output_csv)
@@ -403,7 +431,7 @@ def generate_summary_table(df: pd.DataFrame, output_csv: str = None, output_late
         # Convert to LaTeX
         try:
             latex_str = summary.to_latex()
-            with open(output_latex, 'w') as f:
+            with open(output_latex, "w") as f:
                 f.write(latex_str)
             print(f"LaTeX table saved to {output_latex}")
         except AttributeError:
@@ -416,22 +444,45 @@ def generate_summary_table(df: pd.DataFrame, output_csv: str = None, output_late
 # Main CLI
 # -------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Aggregate and plot simulation results.",
-        epilog="Example: python plot_results.py --input batch_results/ --output plots/ --plots cdf,bar"
+        epilog="Example: python plot_results.py --input batch_results/ --output plots/ --plots cdf,bar",
     )
-    parser.add_argument('--input', '-i', required=True,
-                        help='Input directory (batch results) or summary CSV file.')
-    parser.add_argument('--output', '-o', default='plots',
-                        help='Output directory for plots (default: plots/).')
-    parser.add_argument('--plots', '-p', default='cdf,bar,box,util',
-                        help='Comma-separated list of plot types: cdf, bar, box, util (default: all).')
-    parser.add_argument('--policies', help='Comma-separated list of policies to include (e.g., bestfit,fgd).')
-    parser.add_argument('--table', help='Output CSV for summary table (e.g., summary.csv).')
-    parser.add_argument('--latex', help='Output LaTeX file for summary table (e.g., table.tex).')
-    parser.add_argument('--no-plot', action='store_true',
-                        help='Skip plotting, only generate summary tables.')
+    parser.add_argument(
+        "--input",
+        "-i",
+        required=True,
+        help="Input directory (batch results) or summary CSV file.",
+    )
+    parser.add_argument(
+        "--output",
+        "-o",
+        default="plots",
+        help="Output directory for plots (default: plots/).",
+    )
+    parser.add_argument(
+        "--plots",
+        "-p",
+        default="cdf,bar,box,util",
+        help="Comma-separated list of plot types: cdf, bar, box, util (default: all).",
+    )
+    parser.add_argument(
+        "--policies",
+        help="Comma-separated list of policies to include (e.g., bestfit,fgd).",
+    )
+    parser.add_argument(
+        "--table", help="Output CSV for summary table (e.g., summary.csv)."
+    )
+    parser.add_argument(
+        "--latex", help="Output LaTeX file for summary table (e.g., table.tex)."
+    )
+    parser.add_argument(
+        "--no-plot",
+        action="store_true",
+        help="Skip plotting, only generate summary tables.",
+    )
 
     args = parser.parse_args()
 
@@ -440,7 +491,7 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Load data
-    if args.input.endswith('.csv'):
+    if args.input.endswith(".csv"):
         df = load_summary_from_csv(args.input)
     else:
         df = load_summary_from_directory(args.input)
@@ -453,9 +504,9 @@ def main():
 
     # Filter by policies if requested
     if args.policies:
-        policies = [p.strip() for p in args.policies.split(',')]
-        if 'policy' in df.columns:
-            df = df[df['policy'].isin(policies)]
+        policies = [p.strip() for p in args.policies.split(",")]
+        if "policy" in df.columns:
+            df = df[df["policy"].isin(policies)]
         else:
             print("Warning: 'policy' column not found; cannot filter.")
 
@@ -465,18 +516,18 @@ def main():
 
     # Plots
     if not args.no_plot:
-        plot_types = [p.strip() for p in args.plots.split(',')]
-        if 'cdf' in plot_types:
+        plot_types = [p.strip() for p in args.plots.split(",")]
+        if "cdf" in plot_types:
             plot_wait_time_cdf(df, args.output)
-        if 'bar' in plot_types:
+        if "bar" in plot_types:
             plot_avg_metrics_bar(df, args.output)
-        if 'box' in plot_types:
+        if "box" in plot_types:
             plot_wait_time_box(df, args.output)
-        if 'util' in plot_types:
+        if "util" in plot_types:
             plot_utilization(df, args.output)
 
     print(f"Analysis complete. Outputs saved to {args.output}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

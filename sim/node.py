@@ -16,7 +16,6 @@ The class uses slots to reduce memory overhead, which is important when
 simulating large clusters with thousands of nodes.
 """
 
-from typing import List, Optional
 from dataclasses import dataclass, field
 
 # Import the ResourceRequest and Pod classes from the pod module
@@ -38,12 +37,14 @@ class Node:
 
     # Using __slots__ reduces memory overhead and speeds up attribute access.
     # This is especially beneficial when simulating many nodes.
-    __slots__ = ('name', 'capacity', 'allocated', 'pods')
+    __slots__ = ("allocated", "capacity", "name", "pods")
 
     name: str
     capacity: ResourceRequest
-    allocated: ResourceRequest = field(default_factory=lambda: ResourceRequest(0.0, 0.0, 0))
-    pods: List[Pod] = field(default_factory=list)
+    allocated: ResourceRequest = field(
+        default_factory=lambda: ResourceRequest(0.0, 0.0, 0)
+    )
+    pods: list[Pod] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """
@@ -57,7 +58,11 @@ class Node:
         if self.capacity.cpu < 0 or self.capacity.memory < 0 or self.capacity.gpu < 0:
             raise ValueError("Node capacity cannot be negative.")
         # Ensure allocated starts at zero (if not explicitly set)
-        if self.allocated.cpu != 0 or self.allocated.memory != 0 or self.allocated.gpu != 0:
+        if (
+            self.allocated.cpu != 0
+            or self.allocated.memory != 0
+            or self.allocated.gpu != 0
+        ):
             # If someone passed a non-zero allocated, we allow it, but warn or reset?
             # We'll reset to zero to avoid inconsistent state.
             self.allocated = ResourceRequest(0.0, 0.0, 0)
@@ -78,9 +83,11 @@ class Node:
         Returns:
             True if all resources are available, False otherwise.
         """
-        return (self.allocated.cpu + request.cpu <= self.capacity.cpu and
-                self.allocated.memory + request.memory <= self.capacity.memory and
-                self.allocated.gpu + request.gpu <= self.capacity.gpu)
+        return (
+            self.allocated.cpu + request.cpu <= self.capacity.cpu
+            and self.allocated.memory + request.memory <= self.capacity.memory
+            and self.allocated.gpu + request.gpu <= self.capacity.gpu
+        )
 
     def get_free_resources(self) -> ResourceRequest:
         """
@@ -103,9 +110,15 @@ class Node:
             A dict with keys 'cpu', 'memory', 'gpu' and values between 0 and 1.
         """
         return {
-            "cpu": self.allocated.cpu / self.capacity.cpu if self.capacity.cpu > 0 else 0.0,
-            "memory": self.allocated.memory / self.capacity.memory if self.capacity.memory > 0 else 0.0,
-            "gpu": self.allocated.gpu / self.capacity.gpu if self.capacity.gpu > 0 else 0.0,
+            "cpu": self.allocated.cpu / self.capacity.cpu
+            if self.capacity.cpu > 0
+            else 0.0,
+            "memory": self.allocated.memory / self.capacity.memory
+            if self.capacity.memory > 0
+            else 0.0,
+            "gpu": self.allocated.gpu / self.capacity.gpu
+            if self.capacity.gpu > 0
+            else 0.0,
         }
 
     # -------------------------------------------------------------------------
@@ -182,7 +195,7 @@ class Node:
         pod.node_name = None
         pod.state = "completed"  # generic state, can be overridden
 
-    def get_pod_by_uid(self, uid: str) -> Optional[Pod]:
+    def get_pod_by_uid(self, uid: str) -> Pod | None:
         """
         Retrieve a pod running on this node by its unique identifier.
 
@@ -203,8 +216,10 @@ class Node:
 
     def __repr__(self) -> str:
         """Human-readable representation for debugging."""
-        return (f"Node(name='{self.name}', capacity={self.capacity}, "
-                f"allocated={self.allocated}, pods={len(self.pods)})")
+        return (
+            f"Node(name='{self.name}', capacity={self.capacity}, "
+            f"allocated={self.allocated}, pods={len(self.pods)})"
+        )
 
     def __str__(self) -> str:
         """Shorter representation."""
