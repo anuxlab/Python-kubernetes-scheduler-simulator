@@ -1,0 +1,21 @@
+# docker/docker-compose.yml
+version: '3.8'
+
+services:
+  simulator:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: anuxlab/python-k8s-simulator:latest
+    container_name: k8s-simulator
+    volumes:
+      # Mount configs directory to allow custom YAMLs without rebuilding
+      - ../configs:/app/configs
+      # Mount workloads directory for trace files
+      - ../workloads:/app/workloads
+      # Mount results directory to persist outputs
+      - ../results:/app/results
+    # Override command to run a specific experiment (optional)
+    command: run --config configs/basic.yaml --output results/docker_run --plot
+    # Or use the 'apply' subcommand with separate configs
+    # command: apply --cluster configs/cluster.yaml --scheduler configs/scheduler.yaml --workload configs/workload.yaml --output results/docker_apply

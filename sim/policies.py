@@ -245,6 +245,73 @@ def fgd(gang_pods: List[Pod], cluster: Cluster, rng: random.Random = None) -> Op
 
     return None
 
+def dotproduct(pod: Pod, cluster: Cluster, rng: random.Random = None) -> Optional[Node]:
+    """
+    Dot‑product scoring: score = pod_request · node_free_resources.
+    The node with the highest dot product is selected.
+    This is a standard baseline policy used in the HKUST simulator.
+
+    Args:
+        pod: The pod to schedule.
+        cluster: The cluster state.
+        rng: Optional random generator (not used).
+
+    Returns:
+        The node with the highest dot‑product score, or None if no node can fit.
+    """
+    best_node = None
+    best_score = -float('inf')
+
+    for node in cluster.nodes:
+        if not node.can_fit(pod.resources):
+            continue
+
+        free = node.get_free_resources()
+        # Dot product of pod request and free resources
+        score = (pod.resources.cpu * free.cpu +
+                 pod.resources.memory * free.memory +
+                 pod.resources.gpu * free.gpu)
+
+        # Tie‑break by node name for determinism
+        if score > best_score or (score == best_score and (best_node is None or node.name < best_node.name)):
+            best_score = score
+            best_node = node
+
+    return best_node
+
+def gpuclustering(pod: Pod, cluster: Cluster, rng: random.Random = None) -> Optional[Node]:
+    """
+    GPU Clustering: concentrate GPU workloads on nodes that already have GPU allocations.
+    For pods requesting GPUs: pick the feasible node with the *most* allocated GPUs.
+    For pods not requesting GPUs: pick the feasible node with the *least* allocated GPUs
+    (preferring nodes with zero GPU usage).
+
+    This policy aims to separate GPU and non‑GPU workloads, improving utilisation
+    and reducing fragmentation.
+
+    Args:
+        pod: The pod to schedule.
+        cluster: The cluster state.
+        rng: Optional random generator (not used).
+
+    Returns:
+        The selected node, or None if no feasible node.
+    """
+    feasible = [n for n in cluster.nodes if n.can_fit(pod.resources)]
+    if not feasible:
+        return None
+
+    if pod.resources.gpu > 0:
+        # For GPU pods: prefer nodes with highest GPU allocation (clustering)
+        # Sort by allocated GPUs descending, then by node name for determinism
+        feasible.sort(key=lambda n: (n.allocated.gpu, n.name), reverse=True)
+    else:
+        # For non‑GPU pods: prefer nodes with lowest GPU allocation (avoid GPU nodes)
+        feasible.sort(key=lambda n: (n.allocated.gpu, n.name))
+        # Additionally, if there are nodes with zero GPU, we pick the first of those
+        # But sorting already handles that.
+
+    return feasible[0]   # after sorting, the first node matches the criterion
 
 # -------------------------------------------------------------------------
 # Policy Registry
@@ -262,6 +329,8 @@ POLICY_REGISTRY: Dict[str, Callable] = {
     "best-fit": bestfit,
     "best_fit": bestfit,
     "firstfit": None,  # not implemented explicitly; fallback to bestfit
+    "dotproduct": dotproduct,
+    "gpuclustering": gpuclustering  
 }
 
 def get_policy(name: str) -> Callable:
