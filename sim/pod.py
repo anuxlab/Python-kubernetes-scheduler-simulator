@@ -31,6 +31,7 @@ class ResourceRequest:
     cpu: float
     memory: float
     gpu: int
+
     def __post_init__(self) -> None:
         """Validate that resource values are non‑negative."""
         if self.cpu < 0:
