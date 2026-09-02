@@ -13,12 +13,13 @@ The Node class provides methods to:
 - Query remaining resources and utilisation
 """
 
+from typing import Optional
 from dataclasses import dataclass, field
 
 from .pod import Pod, ResourceRequest
 
 
-@dataclass(slots=True)  # <-- automatic slot generation
+@dataclass   # no slots, works on Python 3.9+
 class Node:
     """
     A simulated Kubernetes node with resource capacity and allocation.
@@ -31,9 +32,7 @@ class Node:
     """
     name: str
     capacity: ResourceRequest
-    allocated: ResourceRequest = field(
-        default_factory=lambda: ResourceRequest(0.0, 0.0, 0)
-    )
+    allocated: ResourceRequest = field(default_factory=lambda: ResourceRequest(0.0, 0.0, 0))
     pods: list[Pod] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -185,7 +184,7 @@ class Node:
         pod.node_name = None
         pod.state = "completed"  # generic state, can be overridden
 
-    def get_pod_by_uid(self, uid: str) -> Pod | None:
+    def get_pod_by_uid(self, uid: str) -> Optional[Pod]:
         """
         Retrieve a pod running on this node by its unique identifier.
 
