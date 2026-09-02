@@ -91,7 +91,7 @@ class Pod:
     node_name: str | None = None
     submit_time: float = 0.0
     start_time: float | None = None
-    finish_time: float | None = None
+    finish_time: float | None
     state: str = "pending"
     priority: int = 0  # not used yet, but reserved
 
