@@ -13,8 +13,11 @@ These classes are used by the Cluster, Node, and Scheduler modules.
 They are designed to be lightweight and easy to serialise for logging.
 """
 
-import uuid
+from __future__ import annotations  # <-- allows `|` union syntax in Python 3.9
+
 from dataclasses import dataclass
+import uuid
+from typing import Optional
 
 
 @dataclass
@@ -27,7 +30,6 @@ class ResourceRequest:
         memory (float): Memory in gigabytes (GiB).
         gpu (int): Number of GPUs requested.
     """
-
     cpu: float
     memory: float
     gpu: int
@@ -41,20 +43,20 @@ class ResourceRequest:
         if self.gpu < 0:
             raise ValueError(f"GPU request cannot be negative: {self.gpu}")
 
-    def __add__(self, other: "ResourceRequest") -> "ResourceRequest":
+    def __add__(self, other: ResourceRequest) -> ResourceRequest:
         """Add two resource requests together (useful for summing gang pods)."""
         return ResourceRequest(
             cpu=self.cpu + other.cpu,
             memory=self.memory + other.memory,
-            gpu=self.gpu + other.gpu,
+            gpu=self.gpu + other.gpu
         )
 
-    def __sub__(self, other: "ResourceRequest") -> "ResourceRequest":
+    def __sub__(self, other: ResourceRequest) -> ResourceRequest:
         """Subtract one resource request from another."""
         return ResourceRequest(
             cpu=self.cpu - other.cpu,
             memory=self.memory - other.memory,
-            gpu=self.gpu - other.gpu,
+            gpu=self.gpu - other.gpu
         )
 
     def is_zero(self) -> bool:
@@ -62,7 +64,7 @@ class ResourceRequest:
         return self.cpu == 0 and self.memory == 0 and self.gpu == 0
 
 
-@dataclass  # no slots, works on Python 3.9+
+@dataclass
 class Pod:
     """
     Represents a single pod in the simulation.
@@ -82,7 +84,6 @@ class Pod:
         state (str): One of "pending", "running", "succeeded", "failed", or "completed".
         priority (int): Optional priority (default 0) for future QoS extensions.
     """
-
     uid: str
     name: str
     resources: ResourceRequest
@@ -147,7 +148,5 @@ class Pod:
 
     def __repr__(self) -> str:
         """Compact representation for logging."""
-        return (
-            f"Pod(uid='{self.uid}', name='{self.name}', "
-            f"resources={self.resources}, state='{self.state}')"
-        )
+        return (f"Pod(uid='{self.uid}', name='{self.name}', "
+                f"resources={self.resources}, state='{self.state}')")
