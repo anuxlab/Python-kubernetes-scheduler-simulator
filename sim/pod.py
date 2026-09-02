@@ -31,7 +31,7 @@ class ResourceRequest:
     cpu: float
     memory: float
     gpu: int
-
+    
     def __post_init__(self) -> None:
         """Validate that resource values are non‑negative."""
         if self.cpu < 0:
@@ -62,7 +62,7 @@ class ResourceRequest:
         return self.cpu == 0 and self.memory == 0 and self.gpu == 0
 
 
-@dataclass
+@dataclass(slots=True)
 class Pod:
     """
     Represents a single pod in the simulation.
