@@ -62,7 +62,7 @@ class ResourceRequest:
         return self.cpu == 0 and self.memory == 0 and self.gpu == 0
 
 
-@dataclass(slots=True)
+@dataclass(slots=True)  # <-- automatic slot generation
 class Pod:
     """
     Represents a single pod in the simulation.
@@ -91,24 +91,9 @@ class Pod:
     node_name: str | None = None
     submit_time: float = 0.0
     start_time: float | None = None
-    finish_time: float | None
+    finish_time: float | None = None
     state: str = "pending"
-    priority: int = 0  # not used yet, but reserved
-
-    # Use __slots__ to reduce memory overhead for many pods
-    __slots__ = (
-        "finish_time",
-        "gang_id",
-        "name",
-        "namespace",
-        "node_name",
-        "priority",
-        "resources",
-        "start_time",
-        "state",
-        "submit_time",
-        "uid",
-    )
+    priority: int = 0
 
     def __post_init__(self) -> None:
         """Validate pod fields and set default UID if not provided."""
