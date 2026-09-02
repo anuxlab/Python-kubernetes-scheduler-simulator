@@ -13,9 +13,8 @@ These classes are used by the Cluster, Node, and Scheduler modules.
 They are designed to be lightweight and easy to serialise for logging.
 """
 
-from dataclasses import dataclass
-from typing import Optional
 import uuid
+from dataclasses import dataclass
 
 
 @dataclass
@@ -28,6 +27,7 @@ class ResourceRequest:
         memory (float): Memory in gigabytes (GiB).
         gpu (int): Number of GPUs requested.
     """
+
     cpu: float
     memory: float
     gpu: int
@@ -41,20 +41,20 @@ class ResourceRequest:
         if self.gpu < 0:
             raise ValueError(f"GPU request cannot be negative: {self.gpu}")
 
-    def __add__(self, other: 'ResourceRequest') -> 'ResourceRequest':
+    def __add__(self, other: "ResourceRequest") -> "ResourceRequest":
         """Add two resource requests together (useful for summing gang pods)."""
         return ResourceRequest(
             cpu=self.cpu + other.cpu,
             memory=self.memory + other.memory,
-            gpu=self.gpu + other.gpu
+            gpu=self.gpu + other.gpu,
         )
 
-    def __sub__(self, other: 'ResourceRequest') -> 'ResourceRequest':
+    def __sub__(self, other: "ResourceRequest") -> "ResourceRequest":
         """Subtract one resource request from another."""
         return ResourceRequest(
             cpu=self.cpu - other.cpu,
             memory=self.memory - other.memory,
-            gpu=self.gpu - other.gpu
+            gpu=self.gpu - other.gpu,
         )
 
     def is_zero(self) -> bool:
@@ -62,7 +62,7 @@ class ResourceRequest:
         return self.cpu == 0 and self.memory == 0 and self.gpu == 0
 
 
-@dataclass   # no slots, works on Python 3.9+
+@dataclass  # no slots, works on Python 3.9+
 class Pod:
     """
     Represents a single pod in the simulation.
@@ -82,15 +82,16 @@ class Pod:
         state (str): One of "pending", "running", "succeeded", "failed", or "completed".
         priority (int): Optional priority (default 0) for future QoS extensions.
     """
+
     uid: str
     name: str
     resources: ResourceRequest
     namespace: str = "default"
-    gang_id: Optional[str] = None
-    node_name: Optional[str] = None
+    gang_id: str | None = None
+    node_name: str | None = None
     submit_time: float = 0.0
-    start_time: Optional[float] = None
-    finish_time: Optional[float] = None
+    start_time: float | None = None
+    finish_time: float | None = None
     state: str = "pending"
     priority: int = 0
 
@@ -133,7 +134,7 @@ class Pod:
         else:
             return current_time - self.submit_time
 
-    def get_run_time(self) -> Optional[float]:
+    def get_run_time(self) -> float | None:
         """
         Return the duration the pod ran, if it has finished.
 
@@ -146,5 +147,7 @@ class Pod:
 
     def __repr__(self) -> str:
         """Compact representation for logging."""
-        return (f"Pod(uid='{self.uid}', name='{self.name}', "
-                f"resources={self.resources}, state='{self.state}')")
+        return (
+            f"Pod(uid='{self.uid}', name='{self.name}', "
+            f"resources={self.resources}, state='{self.state}')"
+        )
